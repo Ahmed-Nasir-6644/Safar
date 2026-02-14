@@ -1,28 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Lock, Mail, ArrowRight, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const AuthPage = () => {
     const [isLogin, setIsLogin] = useState(true);
-    const { login, signup } = useAuth();
+    const { login, register, user } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
+    const [authError, setAuthError] = useState('');
 
     // Form Stats
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [successMessage, setSuccessMessage] = useState('');
+
+    // Check if user is logged in
+    useEffect(() => {
+        if (user) {
+            console.log('👤 User logged in:', user);
+            // You can redirect here or show a success message
+            setAuthError(''); // Clear any errors
+        }
+    }, [user]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
+        setAuthError('');
+        setSuccessMessage('');
         try {
             if (isLogin) {
                 await login(email, password);
             } else {
-                await signup(name, email, password);
+                await register(name, email, password);
+                // On successful signup, switch to login mode
+                setSuccessMessage('Registration successful! Please login with your credentials.');
+                setIsLogin(true);
+                setName('');
+                setEmail('');
+                setPassword('');
             }
         } catch (error) {
             console.error("Auth failed", error);
+            setAuthError(error.message || 'Authentication failed');
         } finally {
             setIsLoading(false);
         }
@@ -110,6 +130,18 @@ const AuthPage = () => {
                             </button>
                         </div>
                     </form>
+
+                    {authError && (
+                        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                            {authError}
+                        </div>
+                    )}
+
+                    {successMessage && (
+                        <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+                            {successMessage}
+                        </div>
+                    )}
 
                     <div className="mt-6 text-center text-sm text-gray-400">
                         {isLogin ? "Don't have an account? " : "Already have an account? "}
