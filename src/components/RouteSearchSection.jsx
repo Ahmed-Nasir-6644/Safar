@@ -3,7 +3,7 @@ import { MapPin, ArrowRightLeft, Search, Loader2, ChevronDown } from 'lucide-rea
 import useRoutes from '../hooks/useRoutes';
 
 const RouteSearchSection = () => {
-    const { findRoute, getAllStops, getStats, loading, error, routeData } = useRoutes();
+    const { findRoute, getAllStops, getStats, searchStops, loading, error, routeData } = useRoutes();
     const [allStops, setAllStops] = useState([]);
     const [fromQuery, setFromQuery] = useState('');
     const [toQuery, setToQuery] = useState('');
@@ -11,10 +11,13 @@ const RouteSearchSection = () => {
     const [toStopName, setToStopName] = useState('');
     const [filteredFromStops, setFilteredFromStops] = useState([]);
     const [filteredToStops, setFilteredToStops] = useState([]);
+    const [searchingFrom, setSearchingFrom] = useState(false);
+    const [searchingTo, setSearchingTo] = useState(false);
     const [showFromDropdown, setShowFromDropdown] = useState(false);
     const [showToDropdown, setShowToDropdown] = useState(false);
     const [stats, setStats] = useState(null);
     const [searching, setSearching] = useState(false);
+    const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
     const [stopsLoading, setStopsLoading] = useState(true);
     const fromInputRef = useRef(null);
     const toInputRef = useRef(null);
@@ -64,31 +67,101 @@ const RouteSearchSection = () => {
         loadInitialData();
     }, [getAllStops, getStats]);
 
-    // Filter from stops
+    // Search from stops (backend)
     useEffect(() => {
-        if (fromQuery.length > 0) {
-            const filtered = allStops.filter(stop =>
-                stop.stop_name.toLowerCase().includes(fromQuery.toLowerCase())
-            );
-            setFilteredFromStops(filtered);
-            setShowFromDropdown(true);
-        } else {
-            setFilteredFromStops([]);
-        }
-    }, [fromQuery, allStops]);
+        let active = true;
+        const trimmedQuery = fromQuery.trim();
 
-    // Filter to stops
-    useEffect(() => {
-        if (toQuery.length > 0) {
-            const filtered = allStops.filter(stop =>
-                stop.stop_name.toLowerCase().includes(toQuery.toLowerCase())
-            );
-            setFilteredToStops(filtered);
-            setShowToDropdown(true);
-        } else {
-            setFilteredToStops([]);
+        if (!trimmedQuery) {
+            setFilteredFromStops([]);
+            setSearchingFrom(false);
+            return undefined;
         }
-    }, [toQuery, allStops]);
+
+        setSearchingFrom(true);
+        setShowFromDropdown(true);
+
+        const timeoutId = setTimeout(async () => {
+            try {
+                const results = await searchStops(trimmedQuery);
+
+                let stopsArray = [];
+                if (Array.isArray(results)) {
+                    stopsArray = results;
+                } else if (results && Array.isArray(results.stops)) {
+                    stopsArray = results.stops;
+                } else if (results && typeof results === 'object') {
+                    stopsArray = results.data && Array.isArray(results.data) ? results.data : [];
+                }
+
+                if (active) {
+                    setFilteredFromStops(stopsArray);
+                }
+            } catch (err) {
+                console.error('Error searching from stops:', err);
+                if (active) {
+                    setFilteredFromStops([]);
+                }
+            } finally {
+                if (active) {
+                    setSearchingFrom(false);
+                }
+            }
+        }, 300);
+
+        return () => {
+            active = false;
+            clearTimeout(timeoutId);
+        };
+    }, [fromQuery, searchStops]);
+
+    // Search to stops (backend)
+    useEffect(() => {
+        let active = true;
+        const trimmedQuery = toQuery.trim();
+
+        if (!trimmedQuery) {
+            setFilteredToStops([]);
+            setSearchingTo(false);
+            return undefined;
+        }
+
+        setSearchingTo(true);
+        setShowToDropdown(true);
+
+        const timeoutId = setTimeout(async () => {
+            try {
+                const results = await searchStops(trimmedQuery);
+
+                let stopsArray = [];
+                if (Array.isArray(results)) {
+                    stopsArray = results;
+                } else if (results && Array.isArray(results.stops)) {
+                    stopsArray = results.stops;
+                } else if (results && typeof results === 'object') {
+                    stopsArray = results.data && Array.isArray(results.data) ? results.data : [];
+                }
+
+                if (active) {
+                    setFilteredToStops(stopsArray);
+                }
+            } catch (err) {
+                console.error('Error searching to stops:', err);
+                if (active) {
+                    setFilteredToStops([]);
+                }
+            } finally {
+                if (active) {
+                    setSearchingTo(false);
+                }
+            }
+        }, 300);
+
+        return () => {
+            active = false;
+            clearTimeout(timeoutId);
+        };
+    }, [toQuery, searchStops]);
 
     // Close dropdowns when clicking outside
     useEffect(() => {
@@ -140,11 +213,34 @@ const RouteSearchSection = () => {
         setSearching(true);
         try {
             await findRoute(fromStopName, toStopName);
+            setSelectedRouteIndex(0);
         } catch (err) {
             console.error('Error finding route:', err);
         } finally {
             setSearching(false);
         }
+    };
+
+    const routes = routeData?.routes && Array.isArray(routeData.routes)
+        ? routeData.routes
+        : routeData
+            ? [routeData]
+            : [];
+
+    const selectedRoute = routes[selectedRouteIndex] || null;
+
+    const formatDistance = (distance) => {
+        if (!Number.isFinite(distance)) {
+            return 'N/A';
+        }
+        return `${distance.toFixed(1)}km`;
+    };
+
+    const formatTime = (distance) => {
+        if (!Number.isFinite(distance)) {
+            return 'N/A';
+        }
+        return `~${Math.ceil(distance / 2)} min`;
     };
 
     const displayFromStops = fromQuery.length > 0 ? filteredFromStops : allStops;
@@ -191,7 +287,7 @@ const RouteSearchSection = () => {
                         {/* From Dropdown */}
                         {showFromDropdown && (
                             <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-xl mt-2 shadow-2xl max-h-72 overflow-y-auto z-20">
-                                {stopsLoading ? (
+                                {stopsLoading || searchingFrom ? (
                                     <div className="px-4 py-6 text-center text-gray-500 text-sm">
                                         Loading stops...
                                     </div>
@@ -257,7 +353,7 @@ const RouteSearchSection = () => {
                         {/* To Dropdown */}
                         {showToDropdown && (
                             <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-xl mt-2 shadow-2xl max-h-72 overflow-y-auto z-20">
-                                {stopsLoading ? (
+                                {stopsLoading || searchingTo ? (
                                     <div className="px-4 py-6 text-center text-gray-500 text-sm">
                                         Loading stops...
                                     </div>
@@ -310,40 +406,100 @@ const RouteSearchSection = () => {
                     </div>
                 )}
 
-                {routeData && (
+                {routes.length > 0 && (
                     <div className="mt-8 p-6 bg-green-50 border border-green-200 rounded-lg">
                         <h3 className="text-lg font-semibold text-green-900 mb-4">
-                            ✅ Route Found!
+                            ✅ Routes Found!
                         </h3>
-                        <div className="grid grid-cols-3 gap-4 text-center mb-4">
-                            <div>
-                                <p className="text-2xl font-bold text-green-600">{routeData.numberOfStops}</p>
-                                <p className="text-sm text-green-700">Total Stops</p>
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold text-green-600">{routeData.totalDistance?.toFixed(1)}km</p>
-                                <p className="text-sm text-green-700">Distance</p>
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold text-green-600">~{Math.ceil(routeData.totalDistance / 2)}</p>
-                                <p className="text-sm text-green-700">Estimated Time (min)</p>
-                            </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-4">
-                            <p className="text-sm font-semibold text-gray-700 mb-2">Route Path:</p>
-                            <div className="flex flex-wrap gap-2">
-                                {routeData.routeStops?.map((stop, index) => (
-                                    <React.Fragment key={stop.stop_id}>
-                                        <div className="px-3 py-1 bg-orange-100 rounded-full text-xs font-medium text-accent-orange">
-                                            {stop.stop_name}
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            {routes.map((route, index) => (
+                                <button
+                                    key={`${route.startStop?.stop_id || 'start'}-${route.endStop?.stop_id || 'end'}-${index}`}
+                                    onClick={() => setSelectedRouteIndex(index)}
+                                    className={`text-left p-4 rounded-xl border transition-all ${
+                                        selectedRouteIndex === index
+                                            ? 'border-accent-orange bg-white shadow-md'
+                                            : 'border-green-200 bg-green-50 hover:bg-white'
+                                    }`}
+                                >
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-sm font-semibold text-gray-800">
+                                            Route Option {index + 1}
+                                        </span>
+                                        <ChevronDown
+                                            className={`w-4 h-4 transition-transform ${
+                                                selectedRouteIndex === index ? 'rotate-180 text-accent-orange' : 'text-gray-400'
+                                            }`}
+                                        />
+                                    </div>
+                                    <div className="text-sm text-gray-600 space-y-1">
+                                        <div className="flex items-center justify-between">
+                                            <span>Stops</span>
+                                            <span className="font-semibold text-gray-900">{route.numberOfStops}</span>
                                         </div>
-                                        {index < routeData.routeStops.length - 1 && (
-                                            <div className="self-center text-gray-400">→</div>
+                                        <div className="flex items-center justify-between">
+                                            <span>Distance</span>
+                                            <span className="font-semibold text-gray-900">{formatDistance(route.totalDistance)}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span>ETA</span>
+                                            <span className="font-semibold text-gray-900">{formatTime(route.totalDistance)}</span>
+                                        </div>
+                                        {route.fare?.amount && (
+                                            <div className="flex items-center justify-between pt-2 mt-2 border-t border-gray-200">
+                                                <span className="font-medium">Fare</span>
+                                                <span className="font-bold text-accent-orange">
+                                                    Rs. {route.fare.amount}
+                                                </span>
+                                            </div>
                                         )}
-                                    </React.Fragment>
-                                ))}
-                            </div>
+                                    </div>
+                                </button>
+                            ))}
                         </div>
+
+                        {selectedRoute && (
+                            <div className="bg-white rounded-lg p-4">
+                                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                                    <p className="text-sm font-semibold text-gray-700">Selected Route Details</p>
+                                    {routeData?.fare?.amount && (
+                                        <span className="text-xs font-semibold text-accent-orange bg-orange-50 px-3 py-1 rounded-full">
+                                            Fare: {routeData.fare.amount} {routeData.fare.currency || ''}
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="grid grid-cols-3 gap-4 text-center mb-4">
+                                    <div>
+                                        <p className="text-2xl font-bold text-green-600">{selectedRoute.numberOfStops}</p>
+                                        <p className="text-sm text-green-700">Total Stops</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-2xl font-bold text-green-600">{formatDistance(selectedRoute.totalDistance)}</p>
+                                        <p className="text-sm text-green-700">Distance</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-2xl font-bold text-green-600">{formatTime(selectedRoute.totalDistance)}</p>
+                                        <p className="text-sm text-green-700">Estimated Time</p>
+                                    </div>
+                                </div>
+                                <div className="bg-green-50 rounded-lg p-4">
+                                    <p className="text-sm font-semibold text-gray-700 mb-2">Route Path:</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedRoute.routeStops?.map((stop, index) => (
+                                            <React.Fragment key={stop.stop_id}>
+                                                <div className="px-3 py-1 bg-orange-100 rounded-full text-xs font-medium text-accent-orange">
+                                                    {stop.stop_name}
+                                                </div>
+                                                {index < selectedRoute.routeStops.length - 1 && (
+                                                    <div className="self-center text-gray-400">→</div>
+                                                )}
+                                            </React.Fragment>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
