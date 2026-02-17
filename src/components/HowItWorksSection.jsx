@@ -1,22 +1,25 @@
 import React from 'react';
 import { MapPin, Brain, CheckCircle, TrainFront } from 'lucide-react';
+import { useGlobalContext } from '../context/GlobalContext';
 
 const HowItWorksSection = () => {
+    const { t } = useGlobalContext();
+
     const steps = [
-        { title: "Enter Destination", description: "Type where you want to go in Islamabad or Rawalpindi.", icon: <MapPin className="h-8 w-8" /> },
-        { title: "Smart Analysis", description: "Our AI finds the fastest Metro & feeder routes.", icon: <Brain className="h-8 w-8" /> },
-        { title: "Choose Option", description: "Select the cheapest or fastest travel plan.", icon: <CheckCircle className="h-8 w-8" /> },
-        { title: "Travel Safely", description: "Get real-time updates and travel with confidence.", icon: <TrainFront className="h-8 w-8" /> }
+        { title: t('step1Title'), description: t('step1Desc'), icon: <MapPin className="h-8 w-8" /> },
+        { title: t('step2Title'), description: t('step2Desc'), icon: <Brain className="h-8 w-8" /> },
+        { title: t('step3Title'), description: t('step3Desc'), icon: <CheckCircle className="h-8 w-8" /> },
+        { title: t('step4Title'), description: t('step4Desc'), icon: <TrainFront className="h-8 w-8" /> }
     ];
 
     return (
         <section id="how-it-works" className="py-20 bg-gray-50 my-container">
             <div className="text-center mb-16">
                 <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-                    How MetroMate Works
+                    {t('howItWorksTitle')}
                 </h2>
                 <p className="text-secondary-gray max-w-2xl mx-auto text-lg">
-                    Navigate the city like a pro in just 4 simple steps.
+                    {t('howItWorksDesc')}
                 </p>
             </div>
 

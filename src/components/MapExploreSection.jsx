@@ -1,11 +1,13 @@
 import { Map, ArrowRightLeft, CreditCard, Clock, ChevronRight, ShoppingBag, Landmark, Briefcase, Trees, ArrowRight } from 'lucide-react';
+import { useGlobalContext } from '../context/GlobalContext';
 
 const MapExploreSection = () => {
+    const { t } = useGlobalContext();
     const locations = [
-        { id: 1, name: "Centaurus Mall", type: "Shopping", icon: <ShoppingBag className="w-5 h-5" /> },
-        { id: 2, name: "Faisal Mosque", type: "Landmark", icon: <Landmark className="w-5 h-5" /> },
-        { id: 3, name: "Blue Area", type: "Business", icon: <Briefcase className="w-5 h-5" /> },
-        { id: 4, name: "Rawal Lake", type: "Nature", icon: <Trees className="w-5 h-5" /> },
+        { id: 1, name: "Centaurus Mall", type: t("shopping"), icon: <ShoppingBag className="w-5 h-5" /> },
+        { id: 2, name: "Faisal Mosque", type: t("landmark"), icon: <Landmark className="w-5 h-5" /> },
+        { id: 3, name: "Blue Area", type: t("business"), icon: <Briefcase className="w-5 h-5" /> },
+        { id: 4, name: "Rawal Lake", type: t("nature"), icon: <Trees className="w-5 h-5" /> },
     ];
 
     return (
@@ -15,13 +17,13 @@ const MapExploreSection = () => {
                 <div className="lg:w-1/2 text-left">
                     <div className="inline-flex items-center space-x-2 px-3 py-1 bg-orange-50 rounded-full text-accent-orange text-sm font-semibold mb-6 border border-orange-100">
                         <Map className="w-4 h-4" />
-                        <span>Interactive Map</span>
+                        <span>{t('interactiveMap')}</span>
                     </div>
                     <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 leading-tight mb-6">
-                        Explore the City <br /> Like Never Before.
+                        {t('exploreCityTitle')}
                     </h2>
                     <p className="text-lg text-secondary-gray mb-8 leading-relaxed">
-                        Discover key landmarks, metro stations, and popular spots directly on our interactive map. Plan your trip visually.
+                        {t('exploreCityDesc')}
                     </p>
 
                     <div className="grid grid-cols-2 gap-4 mb-8">
@@ -36,7 +38,7 @@ const MapExploreSection = () => {
                     </div>
 
                     <button className="px-8 py-4 bg-gray-900 text-white font-semibold rounded-xl shadow-lg hover:bg-black hover:scale-105 transition-all flex items-center space-x-2">
-                        <span>Open Full Map</span>
+                        <span>{t('openFullMap')}</span>
                         <ArrowRight className="w-5 h-5" />
                     </button>
                 </div>
@@ -50,8 +52,8 @@ const MapExploreSection = () => {
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
 
                         <div className="absolute bottom-6 left-6 text-white">
-                            <p className="text-sm font-medium uppercase tracking-wider text-orange-400">Live View</p>
-                            <h3 className="text-2xl font-bold">Islamabad Metro Network</h3>
+                            <p className="text-sm font-medium uppercase tracking-wider text-orange-400">{t('liveView')}</p>
+                            <h3 className="text-2xl font-bold">{t('islamabadMetroNetwork')}</h3>
                         </div>
 
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-white/30 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/50 group-hover:scale-110 transition-transform">

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MapPin, ArrowRightLeft, Search, Loader2, ChevronDown } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useGlobalContext } from '../context/GlobalContext';
 import useRoutes from '../hooks/useRoutes';
 
 const RouteSearchSection = () => {
@@ -21,7 +23,8 @@ const RouteSearchSection = () => {
     const [stopsLoading, setStopsLoading] = useState(true);
     const fromInputRef = useRef(null);
     const toInputRef = useRef(null);
-
+    const navigate = useNavigate();
+    const { t } = useGlobalContext();
     // Load all stops on component mount
     useEffect(() => {
         const loadInitialData = async () => {
@@ -251,10 +254,10 @@ const RouteSearchSection = () => {
             <div className="bg-white rounded-3xl shadow-xl p-8 md:p-12 border border-gray-100">
                 <div className="text-center mb-10">
                     <h2 className="text-[2rem] md:text-[2.5vw] font-bold text-gray-900 mb-4">
-                        Find Your Best Route
+                        {t('findBestRouteTitle')}
                     </h2>
                     <p className="text-secondary-gray text-lg max-w-2xl mx-auto">
-                        Enter your starting point and destination to get the fastest metro connection.
+                        {t('findBestRouteDesc')}
                     </p>
                 </div>
 
@@ -518,8 +521,8 @@ const RouteSearchSection = () => {
                     <div className="text-sm text-secondary-gray uppercase tracking-wider font-medium">Active Lines</div>
                 </div>
                 <div>
-                    <div className="text-[2rem] font-bold text-gray-900">50k+</div>
-                    <div className="text-sm text-secondary-gray uppercase tracking-wider font-medium">Daily Commuters</div>
+                    <div className="text-[2rem] font-bold text-gray-900">{t('commutersCount')}</div>
+                    <div className="text-sm text-secondary-gray uppercase tracking-wider font-medium">{t('commutersLabel')}</div>
                 </div>
             </div>
         </section>
