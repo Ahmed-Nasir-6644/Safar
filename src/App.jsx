@@ -11,7 +11,7 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import SOSButton from './components/SOSButton';
 import { GlobalProvider, useGlobalContext } from './context/GlobalContext';
-
+import ChatWidget from './components/ChatWidget';
 function AppLayout() {
   const location = useLocation();
   const { user, loading } = useGlobalContext();
@@ -38,6 +38,7 @@ function AppLayout() {
     <div className="font-poppins flex flex-col min-h-screen">
       <Navbar />
       <SOSButton />
+      <ChatWidget />
       <main className="flex-grow">
         <Routes>
           <Route path="/" element={<MainPage />} />

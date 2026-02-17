@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { HelpCircle, ChevronDown, ChevronUp, MessageCircle, Send, Lightbulb } from 'lucide-react';
+import { HelpCircle, ChevronDown, ChevronUp, MessageCircle, Send, Lightbulb, CheckCircle, AlertCircle } from 'lucide-react';
 import { useGlobalContext } from '../context/GlobalContext';
 
 const HelpPage = () => {
@@ -62,23 +62,57 @@ const HelpPage = () => {
 };
 
 const FeedbackForm = () => {
-    const { submitFeedback, t } = useGlobalContext();
-    const [form, setForm] = useState({ name: '', email: '', message: '' });
-    const [sent, setSent] = useState(false);
+    const { t } = useGlobalContext();
+    const [form, setForm] = useState({ 
+        fullName: '', 
+        emailAddress: '', 
+        message: '' 
+    });
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submitStatus, setSubmitStatus] = useState(null); // 'success', 'error', or null
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        submitFeedback(form);
-        setSent(true);
-        setTimeout(() => setSent(false), 3000); // Reset for demo
-        setForm({ name: '', email: '', message: '' });
+        setIsSubmitting(true);
+        setSubmitStatus(null);
+
+        try {
+            const response = await fetch('/api/contact', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    fullName: form.fullName,
+                    emailAddress: form.emailAddress,
+                    message: form.message
+                })
+            });
+
+            if (response.ok) {
+                setSubmitStatus('success');
+                setForm({ fullName: '', emailAddress: '', message: '' });
+                
+                // Reset success message after 5 seconds
+                setTimeout(() => {
+                    setSubmitStatus(null);
+                }, 5000);
+            } else {
+                setSubmitStatus('error');
+            }
+        } catch (error) {
+            console.error('Error submitting feedback:', error);
+            setSubmitStatus('error');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
-    if (sent) {
+    if (submitStatus === 'success') {
         return (
             <div className="h-full flex flex-col items-center justify-center text-center p-8 bg-green-50 rounded-xl border border-green-100 animate-in fade-in">
                 <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-4">
-                    <Send className="w-6 h-6" />
+                    <CheckCircle className="w-6 h-6" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900">{t('thankYou')}</h3>
                 <p className="text-gray-600 mt-2">{t('feedbackReceived')}</p>
@@ -88,14 +122,25 @@ const FeedbackForm = () => {
 
     return (
         <form className="space-y-4" onSubmit={handleSubmit}>
+            {submitStatus === 'error' && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                    <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                    <p className="text-red-800 text-sm font-medium">
+                        {t('messageError') || 'Failed to submit feedback. Please try again.'}
+                    </p>
+                </div>
+            )}
+            
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('name')}</label>
                 <input
                     type="text"
+                    name="fullName"
                     required
-                    value={form.name}
-                    onChange={e => setForm({ ...form, name: e.target.value })}
-                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-accent-orange"
+                    value={form.fullName}
+                    onChange={e => setForm({ ...form, fullName: e.target.value })}
+                    disabled={isSubmitting}
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-accent-orange disabled:opacity-50 disabled:cursor-not-allowed"
                     placeholder={t('name')}
                 />
             </div>
@@ -103,26 +148,34 @@ const FeedbackForm = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('email')}</label>
                 <input
                     type="email"
+                    name="emailAddress"
                     required
-                    value={form.email}
-                    onChange={e => setForm({ ...form, email: e.target.value })}
-                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-accent-orange"
+                    value={form.emailAddress}
+                    onChange={e => setForm({ ...form, emailAddress: e.target.value })}
+                    disabled={isSubmitting}
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-accent-orange disabled:opacity-50 disabled:cursor-not-allowed"
                     placeholder="your@email.com"
                 />
             </div>
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('message')}</label>
                 <textarea
+                    name="message"
                     required
                     value={form.message}
                     onChange={e => setForm({ ...form, message: e.target.value })}
-                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-accent-orange h-32 resize-none"
+                    disabled={isSubmitting}
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-accent-orange h-32 resize-none disabled:opacity-50 disabled:cursor-not-allowed"
                     placeholder={t('yourSuggestion')}
                 ></textarea>
             </div>
-            <button type="submit" className="w-full py-3 bg-gray-900 text-white font-semibold rounded-xl hover:bg-black transition-colors flex items-center justify-center gap-2">
-                <Send className="w-4 h-4" />
-                <span>{t('submitFeedback')}</span>
+            <button 
+                type="submit" 
+                disabled={isSubmitting}
+                className="w-full py-3 bg-gray-900 text-white font-semibold rounded-xl hover:bg-black transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                <Send className={`w-4 h-4 ${isSubmitting ? 'animate-pulse' : ''}`} />
+                <span>{isSubmitting ? (t('sending') || 'Sending...') : t('submitFeedback')}</span>
             </button>
         </form>
     );
