@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { User, Lock, Mail, ArrowRight, Loader2 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useGlobalContext } from '../context/GlobalContext';
 
 const AuthPage = () => {
     const [isLogin, setIsLogin] = useState(true);
-    const { login, signup } = useAuth();
+    const { login, signup } = useGlobalContext();
     const [isLoading, setIsLoading] = useState(false);
 
     // Form Stats
