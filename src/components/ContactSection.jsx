@@ -27,7 +27,7 @@ const ContactSection = () => {
         setSubmitStatus(null);
 
         try {
-            const response = await fetch(`${API_URL}/contact`, {
+            const response = await fetch('http://localhost:8000/contact/submit', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -38,7 +38,7 @@ const ContactSection = () => {
             if (response.ok) {
                 setSubmitStatus('success');
                 setFormData({ fullName: '', emailAddress: '', message: '' });
-                
+
                 // Reset success message after 5 seconds
                 setTimeout(() => {
                     setSubmitStatus(null);
@@ -102,7 +102,7 @@ const ContactSection = () => {
                 {/* Contact Form */}
                 <div className="bg-white p-8 rounded-3xl shadow-xl border border-gray-100 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-20 h-20 bg-orange-100 rounded-bl-full z-0"></div>
-                    
+
                     {submitStatus === 'success' && (
                         <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
                             <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
@@ -111,7 +111,7 @@ const ContactSection = () => {
                             </p>
                         </div>
                     )}
-                    
+
                     {submitStatus === 'error' && (
                         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
                             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
@@ -120,7 +120,7 @@ const ContactSection = () => {
                             </p>
                         </div>
                     )}
-                    
+
                     <form onSubmit={handleSubmit} className="relative z-10 space-y-6">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">{t('fullName')}</label>
@@ -162,8 +162,8 @@ const ContactSection = () => {
                             ></textarea>
                         </div>
 
-                        <button 
-                            type="submit" 
+                        <button
+                            type="submit"
                             disabled={isSubmitting}
                             className="w-full py-4 bg-accent-orange text-white font-bold rounded-xl shadow-lg shadow-orange-500/20 hover:bg-orange-600 hover:shadow-orange-500/30 transition-all duration-300 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >

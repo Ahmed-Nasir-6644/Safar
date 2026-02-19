@@ -63,10 +63,10 @@ const HelpPage = () => {
 
 const FeedbackForm = () => {
     const { t } = useGlobalContext();
-    const [form, setForm] = useState({ 
-        fullName: '', 
-        emailAddress: '', 
-        message: '' 
+    const [form, setForm] = useState({
+        fullName: '',
+        emailAddress: '',
+        message: ''
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitStatus, setSubmitStatus] = useState(null); // 'success', 'error', or null
@@ -77,7 +77,7 @@ const FeedbackForm = () => {
         setSubmitStatus(null);
 
         try {
-            const response = await fetch('/api/contact', {
+            const response = await fetch('http://localhost:8000/help/submit', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -92,7 +92,7 @@ const FeedbackForm = () => {
             if (response.ok) {
                 setSubmitStatus('success');
                 setForm({ fullName: '', emailAddress: '', message: '' });
-                
+
                 // Reset success message after 5 seconds
                 setTimeout(() => {
                     setSubmitStatus(null);
@@ -130,7 +130,7 @@ const FeedbackForm = () => {
                     </p>
                 </div>
             )}
-            
+
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('name')}</label>
                 <input
@@ -169,8 +169,8 @@ const FeedbackForm = () => {
                     placeholder={t('yourSuggestion')}
                 ></textarea>
             </div>
-            <button 
-                type="submit" 
+            <button
+                type="submit"
                 disabled={isSubmitting}
                 className="w-full py-3 bg-gray-900 text-white font-semibold rounded-xl hover:bg-black transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >

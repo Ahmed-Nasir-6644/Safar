@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext();
 
-const API_URL = 'http://localhost:5000/auth';
+const API_URL = 'http://localhost:8000/auth';
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
@@ -145,7 +145,7 @@ export const AuthProvider = ({ children }) => {
 
             const data = await response.json();
             console.log('📦 Full response data:', data);
-            
+
             // Registration successful - user needs to login
             // The response contains the user object but no tokens
             console.log('✅ Registration successful - user needs to login');
