@@ -449,6 +449,18 @@ const RouteSearchSection = () => {
                                             <span>ETA</span>
                                             <span className="font-semibold text-gray-900">{formatTime(route.totalDistance)}</span>
                                         </div>
+                                        {route.transferCount !== undefined && (
+                                            <div className="flex items-center justify-between">
+                                                <span>Transfers</span>
+                                                <span className="font-semibold text-gray-900">{route.transferCount}</span>
+                                            </div>
+                                        )}
+                                        {route.busesUsed && route.busesUsed.length > 0 && (
+                                            <div className="flex items-center justify-between">
+                                                <span>Buses</span>
+                                                <span className="font-semibold text-gray-900">{route.busesUsed.join(', ')}</span>
+                                            </div>
+                                        )}
                                         {route.fare?.amount && (
                                             <div className="flex items-center justify-between pt-2 mt-2 border-t border-gray-200">
                                                 <span className="font-medium">Fare</span>
@@ -472,7 +484,7 @@ const RouteSearchSection = () => {
                                         </span>
                                     )}
                                 </div>
-                                <div className="grid grid-cols-3 gap-4 text-center mb-4">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center mb-4">
                                     <div>
                                         <p className="text-2xl font-bold text-green-600">{selectedRoute.numberOfStops}</p>
                                         <p className="text-sm text-green-700">Total Stops</p>
@@ -483,9 +495,27 @@ const RouteSearchSection = () => {
                                     </div>
                                     <div>
                                         <p className="text-2xl font-bold text-green-600">{formatTime(selectedRoute.totalDistance)}</p>
-                                        <p className="text-sm text-green-700">Estimated Time</p>
+                                        <p className="text-sm text-green-700">Est. Time</p>
                                     </div>
+                                    {selectedRoute.transferCount !== undefined && (
+                                        <div>
+                                            <p className="text-2xl font-bold text-blue-600">{selectedRoute.transferCount}</p>
+                                            <p className="text-sm text-blue-700">Transfers</p>
+                                        </div>
+                                    )}
                                 </div>
+                                {selectedRoute.busesUsed && selectedRoute.busesUsed.length > 0 && (
+                                    <div className="bg-blue-50 rounded-lg p-4 mb-4">
+                                        <p className="text-sm font-semibold text-gray-700 mb-2">🚌 Buses Used:</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {selectedRoute.busesUsed.map((bus, idx) => (
+                                                <span key={`${bus}-${idx}`} className="px-3 py-1 bg-blue-200 rounded-full text-sm font-semibold text-blue-800">
+                                                    {bus}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="bg-green-50 rounded-lg p-4">
                                     <p className="text-sm font-semibold text-gray-700 mb-2">Route Path:</p>
                                     <div className="flex flex-wrap gap-2">
