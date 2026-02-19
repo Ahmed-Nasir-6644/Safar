@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MapPin, ArrowRightLeft, Search, Loader2, Map, Mic, Clock, Navigation, AlertCircle, CheckCircle2, Bus, TrendingUp } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { MapPin, ArrowRightLeft, Search, Loader2, Map, Mic, Clock, Navigation, AlertCircle, CheckCircle2, ArrowUpDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useGlobalContext } from '../context/GlobalContext';
 
@@ -22,6 +22,8 @@ const FindRoutesPage = () => {
     const [error, setError] = useState(null);
     const [isListening, setIsListening] = useState(false);
     const [activeVoiceField, setActiveVoiceField] = useState(null); // 'from' | 'to'
+    const [sortBy, setSortBy] = useState('recommended'); // 'recommended' | 'time' | 'stops' | 'transfers'
+    const [selectedRouteIndex, setSelectedRouteIndex] = useState(null);
 
     const navigate = useNavigate();
     const { t } = useGlobalContext();
@@ -72,6 +74,8 @@ const FindRoutesPage = () => {
                 ? data.routes
                 : (data.path_stops ? [data] : []);
             setRoutes(routeList);
+            setSortBy('recommended');
+            setSelectedRouteIndex(null);
         } catch (err) {
             setError(err.message);
         } finally {
@@ -146,6 +150,21 @@ const FindRoutesPage = () => {
         if (n.includes('metro')) return 'bg-purple-100 text-purple-700';
         return 'bg-gray-100 text-gray-700';
     };
+
+    // Sort routes by selected criteria (original index = recommended order)
+    const sortedRoutes = [...routes].sort((a, b) => {
+        if (sortBy === 'time') return (a.total_time || 0) - (b.total_time || 0);
+        if (sortBy === 'stops') return ((a.path_stops || []).length) - ((b.path_stops || []).length);
+        if (sortBy === 'transfers') return ((a.route_segments || []).length) - ((b.route_segments || []).length);
+        return 0; // 'recommended' — keep original backend order
+    });
+
+    const SORT_TABS = [
+        { key: 'recommended', label: '⭐ Recommended' },
+        { key: 'time', label: '⏱ Fastest' },
+        { key: 'stops', label: '🚏 Fewest Stops' },
+        { key: 'transfers', label: '🔄 Fewest Transfers' },
+    ];
 
     return (
         <div className="pt-24 pb-16 min-h-screen bg-gray-50">
@@ -299,29 +318,58 @@ const FindRoutesPage = () => {
                     {/* Route Cards */}
                     {routes.length > 0 && !loading && (
                         <div className="space-y-4">
-                            <p className="text-sm text-secondary-gray font-medium">{routes.length} route{routes.length > 1 ? 's' : ''} found</p>
-                            {routes.map((route, index) => {
-                                const { label, colorClass } = getRouteLabel(index);
+
+                            {/* Sort tabs */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <ArrowUpDown className="w-4 h-4 text-gray-400 shrink-0" />
+                                {SORT_TABS.map(tab => (
+                                    <button
+                                        key={tab.key}
+                                        onClick={() => setSortBy(tab.key)}
+                                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${sortBy === tab.key
+                                                ? 'bg-accent-orange text-white border-accent-orange shadow-sm'
+                                                : 'bg-white text-gray-600 border-gray-200 hover:border-accent-orange hover:text-accent-orange'
+                                            }`}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                                <span className="ml-auto text-xs text-gray-400">{routes.length} option{routes.length > 1 ? 's' : ''}</span>
+                            </div>
+
+                            {sortedRoutes.map((route, index) => {
+                                const originalIndex = routes.indexOf(route);
+                                const { label, colorClass } = getRouteLabel(originalIndex);
                                 const segments = route.route_segments || [];
                                 const stops = route.path_stops || [];
-                                const isRecommended = index === 0;
+                                const isSelected = selectedRouteIndex === index;
 
                                 return (
                                     <div
                                         key={index}
-                                        className={`bg-white rounded-2xl border transition-all hover:shadow-md ${isRecommended ? 'border-green-200 shadow-sm' : 'border-gray-200'}`}
+                                        onClick={() => setSelectedRouteIndex(isSelected ? null : index)}
+                                        className={`bg-white rounded-2xl border-2 transition-all cursor-pointer hover:shadow-md ${isSelected
+                                                ? 'border-accent-orange shadow-lg shadow-orange-100'
+                                                : originalIndex === 0 && sortBy === 'recommended'
+                                                    ? 'border-green-200 shadow-sm'
+                                                    : 'border-gray-200'
+                                            }`}
                                     >
                                         {/* Header row */}
-                                        <div className="p-6 border-b border-gray-100">
-                                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                        <div className="p-5 border-b border-gray-100">
+                                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                                                 <div>
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        {isRecommended && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                                                    <div className="flex items-center gap-2 mb-1.5">
                                                         <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${colorClass}`}>
                                                             {label}
                                                         </span>
+                                                        {isSelected && (
+                                                            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-orange-100 text-accent-orange border border-orange-200 flex items-center gap-1">
+                                                                <CheckCircle2 className="w-3 h-3" /> Selected
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                    <div className="flex items-center gap-3 text-sm text-secondary-gray">
+                                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-secondary-gray">
                                                         <span className="flex items-center gap-1.5 font-semibold text-gray-800">
                                                             <Clock className="w-4 h-4 text-accent-orange" />
                                                             {formatTime(route.total_time)}
@@ -336,22 +384,39 @@ const FindRoutesPage = () => {
                                                                 <span>{segments.length - 1} transfer{segments.length > 2 ? 's' : ''}</span>
                                                             </>
                                                         )}
+                                                        {segments.length <= 1 && (
+                                                            <>
+                                                                <span className="text-gray-300">·</span>
+                                                                <span className="text-green-600 font-medium">Direct</span>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 </div>
-                                                <button
-                                                    onClick={() => handleShowOnMap(route)}
-                                                    className="flex items-center gap-2 px-5 py-2.5 bg-blue-50 text-blue-600 font-semibold rounded-lg hover:bg-blue-100 transition-colors shrink-0"
-                                                >
-                                                    <Map className="w-4 h-4" />
-                                                    Show on Map
-                                                </button>
+                                                <div className="flex gap-2 shrink-0">
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setSelectedRouteIndex(isSelected ? null : index); }}
+                                                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors border ${isSelected
+                                                                ? 'bg-accent-orange text-white border-accent-orange'
+                                                                : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-accent-orange hover:text-accent-orange'
+                                                            }`}
+                                                    >
+                                                        {isSelected ? '✓ Selected' : 'Select'}
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleShowOnMap(route); }}
+                                                        className="flex items-center gap-1.5 px-4 py-2 bg-blue-50 text-blue-600 font-semibold rounded-lg hover:bg-blue-100 transition-colors text-sm border border-blue-100"
+                                                    >
+                                                        <Map className="w-4 h-4" />
+                                                        Map
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
 
-                                        {/* Route path */}
-                                        <div className="p-6">
+                                        {/* Route segments path */}
+                                        <div className="px-5 py-4">
                                             <div className="flex items-center flex-wrap gap-2 text-sm">
-                                                <span className="font-semibold text-gray-800 max-w-[160px] truncate">
+                                                <span className="font-semibold text-gray-800 max-w-[140px] truncate">
                                                     {fromStop?.stop_name || stops[0]?.stop_name || 'Start'}
                                                 </span>
                                                 <span className="text-gray-400">→</span>
@@ -360,17 +425,18 @@ const FindRoutesPage = () => {
                                                     <React.Fragment key={i}>
                                                         <span className={`px-2.5 py-1 rounded text-xs font-bold ${getSegmentColor(seg.route_name)}`}>
                                                             {seg.route_name || 'Route'}
+                                                            {seg.stops?.length ? ` (${seg.stops.length} stops)` : ''}
                                                         </span>
                                                         {i < segments.length - 1 && (
-                                                            <span className="text-gray-400">→</span>
+                                                            <span className="text-xs text-gray-400 font-medium">transfer →</span>
                                                         )}
                                                     </React.Fragment>
                                                 )) : (
-                                                    <span className="text-gray-400 italic text-xs">Direct Route</span>
+                                                    <span className="text-gray-400 italic text-xs">Direct</span>
                                                 )}
 
                                                 <span className="text-gray-400">→</span>
-                                                <span className="font-semibold text-gray-800 max-w-[160px] truncate">
+                                                <span className="font-semibold text-gray-800 max-w-[140px] truncate">
                                                     {toStop?.stop_name || stops[stops.length - 1]?.stop_name || 'End'}
                                                 </span>
                                             </div>
