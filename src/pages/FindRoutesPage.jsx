@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, ArrowRightLeft, Search, Loader2, Map, Mic, Clock, Navigation, AlertCircle, CheckCircle2, ArrowUpDown } from 'lucide-react';
+import ReactDOM from 'react-dom';
+import { MapPin, ArrowRightLeft, Search, Loader2, Map, Mic, Clock, Navigation, AlertCircle, CheckCircle2, ArrowUpDown, Star, Repeat2, Bus, Train, Ruler, ArrowRight, X, Banknote, ChevronRight, ListOrdered } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useGlobalContext } from '../context/GlobalContext';
 
@@ -21,9 +22,10 @@ const FindRoutesPage = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [isListening, setIsListening] = useState(false);
-    const [activeVoiceField, setActiveVoiceField] = useState(null); // 'from' | 'to'
-    const [sortBy, setSortBy] = useState('recommended'); // 'recommended' | 'time' | 'stops' | 'transfers'
+    const [activeVoiceField, setActiveVoiceField] = useState(null);
+    const [sortBy, setSortBy] = useState('recommended');
     const [selectedRouteIndex, setSelectedRouteIndex] = useState(null);
+    const [modalRoute, setModalRoute] = useState(null); // route object for detail modal
 
     const navigate = useNavigate();
     const { t } = useGlobalContext();
@@ -123,16 +125,25 @@ const FindRoutesPage = () => {
     const handleShowOnMap = (route) => {
         navigate('/network-map', { state: { routeToDisplay: route } });
     };
-
+    // --- Helpers ---
     const formatTime = (mins) => {
-        if (!Number.isFinite(mins)) return 'N/A';
-        if (mins < 60) return `${Math.ceil(mins)} min`;
-        return `${Math.floor(mins / 60)}h ${Math.ceil(mins % 60)}m`;
+        if (!mins && mins !== 0) return 'N/A';
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        if (h > 0) return `${h}h ${m}m`;
+        return `${m} min`;
     };
 
     const formatDistance = (km) => {
-        if (!Number.isFinite(km)) return 'N/A';
-        return `${km.toFixed(1)} km`;
+        if (!km && km !== 0) return 'N/A';
+        return km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(km * 1000)} m`;
+    };
+
+    // Fare estimate: Rs.30 base + Rs.8/km, rounded to nearest 5
+    const estimateFare = (km) => {
+        if (!km && km !== 0) return null;
+        const raw = 30 + km * 8;
+        return Math.ceil(raw / 5) * 5;
     };
 
     const getRouteLabel = (index) => {
@@ -141,30 +152,176 @@ const FindRoutesPage = () => {
         return { label: `Option ${index + 1}`, colorClass: 'bg-gray-100 text-gray-600 border-gray-200' };
     };
 
-    const getSegmentColor = (routeName) => {
+    const getTransportIcon = (routeName) => {
         const n = (routeName || '').toLowerCase();
-        if (n.includes('red')) return 'bg-red-100 text-red-700';
-        if (n.includes('blue')) return 'bg-blue-100 text-blue-700';
-        if (n.includes('green')) return 'bg-green-100 text-green-700';
-        if (n.includes('orange')) return 'bg-orange-100 text-orange-700';
-        if (n.includes('metro')) return 'bg-purple-100 text-purple-700';
-        return 'bg-gray-100 text-gray-700';
+        if (n.includes('orange line') || n.includes('train') || n.includes('metro line')) return Train;
+        return Bus;
     };
 
-    // Sort routes by selected criteria (original index = recommended order)
+    const getSegmentAccent = (routeName) => {
+        const n = (routeName || '').toLowerCase();
+        if (n.includes('red')) return { bg: 'bg-red-500', light: 'bg-red-50 text-red-700 border-red-200' };
+        if (n.includes('blue')) return { bg: 'bg-blue-500', light: 'bg-blue-50 text-blue-700 border-blue-200' };
+        if (n.includes('green')) return { bg: 'bg-green-500', light: 'bg-green-50 text-green-700 border-green-200' };
+        if (n.includes('orange')) return { bg: 'bg-orange-500', light: 'bg-orange-50 text-orange-700 border-orange-200' };
+        if (n.includes('metro')) return { bg: 'bg-purple-500', light: 'bg-purple-50 text-purple-700 border-purple-200' };
+        return { bg: 'bg-gray-400', light: 'bg-gray-50 text-gray-700 border-gray-200' };
+    };
+
+    // Sort routes
     const sortedRoutes = [...routes].sort((a, b) => {
         if (sortBy === 'time') return (a.total_time || 0) - (b.total_time || 0);
         if (sortBy === 'stops') return ((a.path_stops || []).length) - ((b.path_stops || []).length);
         if (sortBy === 'transfers') return ((a.route_segments || []).length) - ((b.route_segments || []).length);
-        return 0; // 'recommended' — keep original backend order
+        return 0;
     });
 
     const SORT_TABS = [
-        { key: 'recommended', label: '⭐ Recommended' },
-        { key: 'time', label: '⏱ Fastest' },
-        { key: 'stops', label: '🚏 Fewest Stops' },
-        { key: 'transfers', label: '🔄 Fewest Transfers' },
+        { key: 'recommended', label: 'Recommended', Icon: Star },
+        { key: 'time', label: 'Fastest', Icon: Clock },
+        { key: 'stops', label: 'Fewest Stops', Icon: Bus },
+        { key: 'transfers', label: 'Fewest Transfers', Icon: Repeat2 },
     ];
+
+    // ---- Detail Modal ----
+    const DetailModal = ({ route, onClose }) => {
+        if (!route) return null;
+        const segments = route.route_segments || [];
+        const stops = route.path_stops || [];
+        const fare = route.fare_pkr || estimateFare(route.total_distance);
+
+        return ReactDOM.createPortal(
+            <div
+                style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
+                onClick={onClose}
+            >
+                {/* Sheet panel — slides up from bottom on all screen sizes */}
+                <div
+                    style={{ backgroundColor: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '680px', maxHeight: '92dvh', overflowY: 'hidden', fontFamily: 'Poppins, sans-serif', boxShadow: '0 -8px 40px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column' }}
+                    onClick={e => e.stopPropagation()}
+                >
+                    {/* Drag handle */}
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 2px', flexShrink: 0 }}>
+                        <div style={{ width: 36, height: 4, borderRadius: 99, backgroundColor: '#e5e7eb' }} />
+                    </div>
+
+                    {/* Header */}
+                    <div style={{ padding: '10px 16px 10px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, flexShrink: 0 }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                            <p style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 2px' }}>Route Details</p>
+                            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#111827', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {fromStop?.stop_name || stops[0]?.stop_name || 'Start'} → {toStop?.stop_name || stops[stops.length - 1]?.stop_name || 'End'}
+                            </h3>
+                        </div>
+                        <button onClick={onClose} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 10, border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <X size={16} color="#6b7280" />
+                        </button>
+                    </div>
+
+                    {/* Stats — 2-column grid (always, scales up naturally on wider screens) */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', borderBottom: '1px solid #f3f4f6', flexShrink: 0 }}>
+                        {[
+                            { Icon: Clock, label: 'Duration', value: formatTime(route.total_time), color: '#f97316' },
+                            { Icon: Ruler, label: 'Distance', value: formatDistance(route.total_distance), color: '#3b82f6' },
+                            { Icon: Bus, label: 'Stops', value: stops.length, color: '#6b7280' },
+                            { Icon: Banknote, label: 'Est. Fare', value: fare ? `Rs. ${fare}` : 'N/A', color: '#10b981' },
+                        ].map(({ Icon, label, value, color }, idx) => (
+                            <div key={label} style={{
+                                padding: '12px 10px',
+                                textAlign: 'center',
+                                borderRight: idx % 2 === 0 ? '1px solid #f3f4f6' : 'none',
+                                borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none',
+                            }}>
+                                <div style={{ width: 30, height: 30, borderRadius: 9, background: `${color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 5px' }}>
+                                    <Icon size={15} color={color} />
+                                </div>
+                                <p style={{ fontSize: 10, color: '#9ca3af', margin: '0 0 2px', fontWeight: 500 }}>{label}</p>
+                                <p style={{ fontSize: 13, fontWeight: 700, color: '#111827', margin: 0 }}>{value}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Scrollable body — segments + stop list */}
+                    <div style={{ overflowY: 'auto', flex: 1, padding: '16px' }}>
+                        {segments.length > 0 ? segments.map((seg, si) => {
+                            const TransIcon = getTransportIcon(seg.route_name);
+                            const segStops = seg.stops || [];
+                            return (
+                                <div key={si} style={{ marginBottom: si < segments.length - 1 ? 20 : 0 }}>
+                                    {/* Segment header */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                                        <div style={{ width: 32, height: 32, borderRadius: 10, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                            <TransIcon size={15} color="#374151" />
+                                        </div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{seg.route_name || 'Route'}</p>
+                                            <p style={{ margin: 0, fontSize: 11, color: '#9ca3af' }}>{segStops.length} stops on this segment</p>
+                                        </div>
+                                        {si < segments.length - 1 && (
+                                            <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 99, background: '#fef3c7', color: '#d97706', border: '1px solid #fde68a' }}>Transfer</span>
+                                        )}
+                                    </div>
+
+                                    {/* Stop list */}
+                                    {segStops.length > 0 && (
+                                        <div style={{ paddingLeft: 16, borderLeft: '2px solid #e5e7eb' }}>
+                                            {segStops.map((stop, i) => {
+                                                const isFirst = i === 0;
+                                                const isLast = i === segStops.length - 1;
+                                                return (
+                                                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < segStops.length - 1 ? 10 : 0 }}>
+                                                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: isFirst ? '#22c55e' : isLast ? '#ef4444' : '#d1d5db', border: '2px solid #fff', outline: `2px solid ${isFirst ? '#22c55e' : isLast ? '#ef4444' : '#d1d5db'}`, flexShrink: 0, marginLeft: -5 }} />
+                                                        <span style={{ fontSize: 13, color: isFirst || isLast ? '#111827' : '#6b7280', fontWeight: isFirst || isLast ? 600 : 400, lineHeight: 1.4 }}>
+                                                            {stop.stop_name || stop}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        }) : (
+                            stops.length > 0 && (
+                                <div style={{ paddingLeft: 16, borderLeft: '2px solid #e5e7eb' }}>
+                                    {stops.map((stop, i) => {
+                                        const isFirst = i === 0;
+                                        const isLast = i === stops.length - 1;
+                                        return (
+                                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < stops.length - 1 ? 10 : 0 }}>
+                                                <div style={{ width: 10, height: 10, borderRadius: '50%', background: isFirst ? '#22c55e' : isLast ? '#ef4444' : '#d1d5db', border: '2px solid #fff', outline: `2px solid ${isFirst ? '#22c55e' : isLast ? '#ef4444' : '#d1d5db'}`, flexShrink: 0, marginLeft: -5 }} />
+                                                <span style={{ fontSize: 13, color: isFirst || isLast ? '#111827' : '#6b7280', fontWeight: isFirst || isLast ? 600 : 400, lineHeight: 1.4 }}>
+                                                    {stop.stop_name || stop}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )
+                        )}
+                    </div>
+
+                    {/* Footer — buttons always visible, stacked on very small screens */}
+                    <div style={{ padding: '12px 16px', paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))', borderTop: '1px solid #f3f4f6', display: 'flex', flexWrap: 'wrap', gap: 10, flexShrink: 0, backgroundColor: '#fff' }}>
+                        <button
+                            onClick={() => { onClose(); handleShowOnMap(route); }}
+                            style={{ flex: '1 1 140px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '13px 12px', borderRadius: 14, background: '#eff6ff', color: '#2563eb', fontWeight: 700, fontSize: 14, border: '1px solid #bfdbfe', cursor: 'pointer' }}
+                        >
+                            <Map size={17} /> View on Map
+                        </button>
+                        <button
+                            onClick={onClose}
+                            style={{ flex: '1 1 80px', padding: '13px 20px', borderRadius: 14, background: '#f3f4f6', color: '#374151', fontWeight: 600, fontSize: 14, border: 'none', cursor: 'pointer' }}
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>,
+            document.body
+        );
+    };
+
 
     return (
         <div className="pt-24 pb-16 min-h-screen bg-gray-50">
@@ -317,24 +474,26 @@ const FindRoutesPage = () => {
 
                     {/* Route Cards */}
                     {routes.length > 0 && !loading && (
-                        <div className="space-y-4">
+                        <div className="space-y-5">
 
                             {/* Sort tabs */}
-                            <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-2 flex-wrap bg-white border border-gray-200 rounded-2xl px-4 py-3 shadow-sm">
                                 <ArrowUpDown className="w-4 h-4 text-gray-400 shrink-0" />
-                                {SORT_TABS.map(tab => (
+                                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide mr-1">Sort by</span>
+                                {SORT_TABS.map(({ key, label, Icon }) => (
                                     <button
-                                        key={tab.key}
-                                        onClick={() => setSortBy(tab.key)}
-                                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${sortBy === tab.key
-                                                ? 'bg-accent-orange text-white border-accent-orange shadow-sm'
-                                                : 'bg-white text-gray-600 border-gray-200 hover:border-accent-orange hover:text-accent-orange'
+                                        key={key}
+                                        onClick={() => setSortBy(key)}
+                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${sortBy === key
+                                            ? 'bg-accent-orange text-white border-accent-orange shadow-sm'
+                                            : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-accent-orange hover:text-accent-orange'
                                             }`}
                                     >
-                                        {tab.label}
+                                        <Icon className="w-3.5 h-3.5" />
+                                        {label}
                                     </button>
                                 ))}
-                                <span className="ml-auto text-xs text-gray-400">{routes.length} option{routes.length > 1 ? 's' : ''}</span>
+                                <span className="ml-auto text-xs text-gray-400 font-medium">{routes.length} option{routes.length > 1 ? 's' : ''}</span>
                             </div>
 
                             {sortedRoutes.map((route, index) => {
@@ -343,103 +502,119 @@ const FindRoutesPage = () => {
                                 const segments = route.route_segments || [];
                                 const stops = route.path_stops || [];
                                 const isSelected = selectedRouteIndex === index;
+                                const isDirect = segments.length <= 1;
+                                const fare = route.fare_pkr || estimateFare(route.total_distance);
+                                const accent = segments.length > 0 ? getSegmentAccent(segments[0].route_name) : { bg: 'bg-gray-300', light: 'bg-gray-50 text-gray-600 border-gray-200' };
 
                                 return (
                                     <div
                                         key={index}
-                                        onClick={() => setSelectedRouteIndex(isSelected ? null : index)}
-                                        className={`bg-white rounded-2xl border-2 transition-all cursor-pointer hover:shadow-md ${isSelected
-                                                ? 'border-accent-orange shadow-lg shadow-orange-100'
-                                                : originalIndex === 0 && sortBy === 'recommended'
-                                                    ? 'border-green-200 shadow-sm'
-                                                    : 'border-gray-200'
+                                        onClick={() => setModalRoute(route)}
+                                        className={`bg-white rounded-2xl overflow-hidden border-2 transition-all duration-200 cursor-pointer hover:shadow-xl ${isSelected
+                                            ? 'border-accent-orange shadow-xl shadow-orange-100'
+                                            : 'border-gray-100 shadow-sm hover:border-gray-200'
                                             }`}
                                     >
-                                        {/* Header row */}
-                                        <div className="p-5 border-b border-gray-100">
-                                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-                                                <div>
-                                                    <div className="flex items-center gap-2 mb-1.5">
-                                                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${colorClass}`}>
-                                                            {label}
+                                        {/* Top accent bar */}
+                                        <div className={`h-1.5 w-full ${isSelected ? 'bg-accent-orange' : accent.bg}`} />
+
+                                        <div className="p-6 md:p-7">
+                                            {/* Top row */}
+                                            <div className="flex items-start justify-between gap-4 mb-5">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className={`text-xs font-bold px-3 py-1.5 rounded-full border ${colorClass}`}>{label}</span>
+                                                    {isDirect && (
+                                                        <span className="text-xs font-bold px-3 py-1.5 rounded-full bg-green-50 text-green-700 border border-green-200">Direct</span>
+                                                    )}
+                                                    {isSelected && (
+                                                        <span className="text-xs font-bold px-3 py-1.5 rounded-full bg-orange-100 text-accent-orange border border-orange-200 flex items-center gap-1">
+                                                            <CheckCircle2 className="w-3 h-3" /> Selected
                                                         </span>
-                                                        {isSelected && (
-                                                            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-orange-100 text-accent-orange border border-orange-200 flex items-center gap-1">
-                                                                <CheckCircle2 className="w-3 h-3" /> Selected
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-secondary-gray">
-                                                        <span className="flex items-center gap-1.5 font-semibold text-gray-800">
-                                                            <Clock className="w-4 h-4 text-accent-orange" />
-                                                            {formatTime(route.total_time)}
-                                                        </span>
-                                                        <span className="text-gray-300">·</span>
-                                                        <span>{formatDistance(route.total_distance)}</span>
-                                                        <span className="text-gray-300">·</span>
-                                                        <span>{stops.length} stops</span>
-                                                        {segments.length > 1 && (
-                                                            <>
-                                                                <span className="text-gray-300">·</span>
-                                                                <span>{segments.length - 1} transfer{segments.length > 2 ? 's' : ''}</span>
-                                                            </>
-                                                        )}
-                                                        {segments.length <= 1 && (
-                                                            <>
-                                                                <span className="text-gray-300">·</span>
-                                                                <span className="text-green-600 font-medium">Direct</span>
-                                                            </>
-                                                        )}
-                                                    </div>
+                                                    )}
                                                 </div>
-                                                <div className="flex gap-2 shrink-0">
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); setSelectedRouteIndex(isSelected ? null : index); }}
-                                                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors border ${isSelected
-                                                                ? 'bg-accent-orange text-white border-accent-orange'
-                                                                : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-accent-orange hover:text-accent-orange'
-                                                            }`}
-                                                    >
-                                                        {isSelected ? '✓ Selected' : 'Select'}
-                                                    </button>
+                                                <div className="flex items-center gap-2 shrink-0">
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleShowOnMap(route); }}
-                                                        className="flex items-center gap-1.5 px-4 py-2 bg-blue-50 text-blue-600 font-semibold rounded-lg hover:bg-blue-100 transition-colors text-sm border border-blue-100"
+                                                        className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-600 font-semibold rounded-xl hover:bg-blue-100 transition-colors text-xs border border-blue-100"
                                                     >
-                                                        <Map className="w-4 h-4" />
-                                                        Map
+                                                        <Map className="w-3.5 h-3.5" />View Map
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setSelectedRouteIndex(isSelected ? null : index); }}
+                                                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors border ${isSelected
+                                                            ? 'bg-accent-orange text-white border-accent-orange'
+                                                            : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-accent-orange hover:text-accent-orange'
+                                                            }`}
+                                                    >
+                                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                                        {isSelected ? 'Selected' : 'Select'}
                                                     </button>
                                                 </div>
                                             </div>
-                                        </div>
 
-                                        {/* Route segments path */}
-                                        <div className="px-5 py-4">
-                                            <div className="flex items-center flex-wrap gap-2 text-sm">
-                                                <span className="font-semibold text-gray-800 max-w-[140px] truncate">
-                                                    {fromStop?.stop_name || stops[0]?.stop_name || 'Start'}
-                                                </span>
-                                                <span className="text-gray-400">→</span>
-
-                                                {segments.length > 0 ? segments.map((seg, i) => (
-                                                    <React.Fragment key={i}>
-                                                        <span className={`px-2.5 py-1 rounded text-xs font-bold ${getSegmentColor(seg.route_name)}`}>
-                                                            {seg.route_name || 'Route'}
-                                                            {seg.stops?.length ? ` (${seg.stops.length} stops)` : ''}
-                                                        </span>
-                                                        {i < segments.length - 1 && (
-                                                            <span className="text-xs text-gray-400 font-medium">transfer →</span>
-                                                        )}
-                                                    </React.Fragment>
-                                                )) : (
-                                                    <span className="text-gray-400 italic text-xs">Direct</span>
-                                                )}
-
-                                                <span className="text-gray-400">→</span>
-                                                <span className="font-semibold text-gray-800 max-w-[140px] truncate">
-                                                    {toStop?.stop_name || stops[stops.length - 1]?.stop_name || 'End'}
-                                                </span>
+                                            {/* Stats row */}
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                                                {[
+                                                    { Icon: Clock, label: 'Duration', value: formatTime(route.total_time), iconBg: 'bg-orange-50', iconColor: 'text-accent-orange' },
+                                                    { Icon: Ruler, label: 'Distance', value: formatDistance(route.total_distance), iconBg: 'bg-blue-50', iconColor: 'text-blue-500' },
+                                                    { Icon: Bus, label: 'Stops', value: stops.length, iconBg: 'bg-gray-100', iconColor: 'text-gray-500' },
+                                                    { Icon: Banknote, label: 'Est. Fare', value: fare ? `Rs. ${fare}` : 'N/A', iconBg: 'bg-green-50', iconColor: 'text-green-600' },
+                                                ].map(({ Icon, label, value, iconBg, iconColor }) => (
+                                                    <div key={label} className={`flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100`}>
+                                                        <div className={`w-9 h-9 rounded-xl ${iconBg} flex items-center justify-center shrink-0`}>
+                                                            <Icon className={`w-4 h-4 ${iconColor}`} />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs text-gray-400 leading-none mb-1">{label}</p>
+                                                            <p className="text-sm font-bold text-gray-800 leading-none">{value}</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
+
+                                            {/* Journey flow strip */}
+                                            <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-100 flex items-center flex-wrap gap-2">
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                    <div className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" />
+                                                    <span className="text-xs font-semibold text-gray-700 truncate max-w-[90px] sm:max-w-[140px]">
+                                                        {fromStop?.stop_name || stops[0]?.stop_name || 'Start'}
+                                                    </span>
+                                                </div>
+                                                {segments.length > 0 ? segments.map((seg, i) => {
+                                                    const TransIcon = getTransportIcon(seg.route_name);
+                                                    const segAccent = getSegmentAccent(seg.route_name);
+                                                    return (
+                                                        <React.Fragment key={i}>
+                                                            <ArrowRight className="w-3 h-3 text-gray-400 shrink-0" />
+                                                            <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold ${segAccent.light}`}>
+                                                                <TransIcon className="w-3.5 h-3.5 shrink-0" />
+                                                                <span>{seg.route_name || 'Route'}</span>
+                                                                {seg.stops?.length > 0 && <span className="opacity-60 font-normal">· {seg.stops.length} stops</span>}
+                                                            </div>
+                                                            {i < segments.length - 1 && (
+                                                                <span className="text-xs text-gray-500 font-medium px-1 shrink-0">transfer</span>
+                                                            )}
+                                                        </React.Fragment>
+                                                    );
+                                                }) : (
+                                                    <React.Fragment>
+                                                        <ArrowRight className="w-3 h-3 text-gray-400 shrink-0" />
+                                                        <span className="text-xs text-gray-500 italic">Direct</span>
+                                                    </React.Fragment>
+                                                )}
+                                                <ArrowRight className="w-3 h-3 text-gray-400 shrink-0" />
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                    <div className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0" />
+                                                    <span className="text-xs font-semibold text-gray-700 truncate max-w-[90px] sm:max-w-[140px]">
+                                                        {toStop?.stop_name || stops[stops.length - 1]?.stop_name || 'End'}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {/* Tap hint */}
+                                            <p className="text-xs text-gray-400 mt-3 flex items-center gap-1">
+                                                <ChevronRight className="w-3 h-3" /> Tap card to view full stop details
+                                            </p>
                                         </div>
                                     </div>
                                 );
@@ -448,6 +623,7 @@ const FindRoutesPage = () => {
                     )}
                 </div>
             </div>
+            {modalRoute && <DetailModal route={modalRoute} onClose={() => setModalRoute(null)} />}
         </div>
     );
 };
