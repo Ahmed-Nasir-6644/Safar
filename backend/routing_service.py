@@ -1,8 +1,13 @@
+"""
+MetroMate Routing Service
+Aligned with reference backend contract (Safar-Backend)
+Endpoints match routeFinderRoutes.js / routeFinderController.js
+"""
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 import json
 import math
 import heapq
@@ -13,49 +18,63 @@ app = FastAPI(title="MetroMate Routing API")
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000", "http://localhost:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ============================================================================
-# DATA MODELS
+# DATA MODELS - Aligned with reference backend
 # ============================================================================
 
-class RouteRequest(BaseModel):
-    source_stop_id: str
-    destination_stop_id: str
+class FindRouteByIdRequest(BaseModel):
+    """Request body for POST /routes/find"""
+    startStopId: str
+    endStopId: str
+
+class FindRouteByNameRequest(BaseModel):
+    """Request body for POST /routes/find/by-name"""
+    startStopName: str
+    endStopName: str
+    maxRoutes: Optional[int] = 6
+
+class NearbyRequest(BaseModel):
+    """Request body for POST /routes/nearby"""
+    stopId: str
+    radiusKm: Optional[float] = 5
 
 class StopInfo(BaseModel):
     stop_id: str
     stop_name: str
-    lat: float
-    lng: float
+    stop_lat: float
+    stop_lon: float
 
 class RouteSegment(BaseModel):
-    route_name: str
-    color: str
-    geometry: Dict  # LineString GeoJSON geometry
-    stops: List[StopInfo]
-
+    routeName: str
+    routeId: str
+    stops: List[Dict]
+    stopCount: int
+    distance: float
+    boardingStop: str
+    alightingStop: str
 
 class SingleRoute(BaseModel):
-    path_stops: List[StopInfo]
-    route_segments: List[RouteSegment]
-    total_distance: float
-    total_time: float
+    routeStops: List[Dict]
+    numberOfStops: int
+    totalDistance: float
+    estimatedMinutes: Optional[int] = None
+    fare: Optional[Dict] = None
+    transferCount: int
+    busesUsed: List[str]
+    busSequence: List[str]
+    routeSegments: List[Dict]
 
-class RouteResponse(BaseModel):
+class APIResponse(BaseModel):
+    """Standard API response format matching reference backend"""
     success: bool
-    routes: List[SingleRoute] = []
-    
-    # Deprecated fields for backward compatibility
-    path_stops: Optional[List[StopInfo]] = None
-    route_segments: Optional[List[RouteSegment]] = None
-    total_distance: Optional[float] = None
-    total_time: Optional[float] = None
-    error: Optional[str] = None
+    message: str
+    data: Optional[Any] = None
 
 # ============================================================================
 # GRAPH CONSTRUCTION & UTILITIES
@@ -318,11 +337,12 @@ async def load_transit_data():
         print(f"❌ Error loading transit data: {e}")
 
 # ============================================================================
-# API ENDPOINTS
+# API ENDPOINTS - Aligned with reference backend (routeFinderRoutes.js)
 # ============================================================================
 
 @app.get("/")
 def root():
+    """Root endpoint"""
     return {
         "service": "MetroMate Transit Routing API",
         "version": "1.0.0",
@@ -331,170 +351,566 @@ def root():
         "routes_loaded": len(transit_graph.routes)
     }
 
-@app.get("/stops")
-def get_all_stops():
-    """Get all available stops"""
-    stops_list = [
-        {
-            "stop_id": stop_id,
-            "stop_name": info['stop_name'],
-            "lat": info['lat'],
-            "lng": info['lng']
-        }
-        for stop_id, info in transit_graph.stops.items()
-    ]
-    return {"stops": stops_list, "count": len(stops_list)}
+# ============================================================================
+# /routes/* ENDPOINTS - Matching reference backend contract
+# ============================================================================
 
-@app.get("/routes")
-def get_all_routes():
-    """Get all available routes"""
-    routes_list = [
-        {
-            "route_name": route_name,
-            "color": info['color'],
-            "segments_count": len(info['geometries'])
-        }
-        for route_name, info in transit_graph.routes.items()
-    ]
-    return {"routes": routes_list, "count": len(routes_list)}
-
-@app.post("/find-route", response_model=RouteResponse)
-async def find_route(request: RouteRequest):
-    print(f"endpoint hit: {request.source_stop_id} -> {request.destination_stop_id}")
+@app.post("/routes/init")
+async def init_graph():
+    """
+    Initialize route graph
+    POST /routes/init
+    Response: { success, message, data: [...stopNames] }
+    """
     try:
-        found_routes = []
-        penalized_edges = {}
-        
-        # Try to find up to 3 unique routes
-        for _ in range(3):
-            try:
-                # Find shortest path with current penalties
-                path_ids, total_time, route_segments_info = transit_graph.find_shortest_path(
-                    request.source_stop_id,
-                    request.destination_stop_id,
-                    penalized_edges
-                )
-                
-                # Build detailed stop information
-                path_stops = []
-                for stop_id in path_ids:
-                    stop = transit_graph.stops[stop_id]
-                    path_stops.append(StopInfo(
-                        stop_id=stop_id,
-                        stop_name=stop['stop_name'],
-                        lat=stop['lat'],
-                        lng=stop['lng']
-                    ))
-                
-                # Build route segments with geometries
-                route_segments = []
-                current_route = None
-                current_stops = []
-                
-                for i, route_info in enumerate(route_segments_info):
-                    if route_info:
-                        route_name = route_info['route_name']
-                        
-                        # If route changed, save previous segment
-                        if current_route and current_route != route_name:
-                            # Find geometry for this segment
-                            geometry = None
-                            if current_route in transit_graph.routes:
-                                # Use first geometry as representative
-                                geometry = transit_graph.routes[current_route]['geometries'][0]['geometry']
-                            
-                            route_segments.append(RouteSegment(
-                                route_name=current_route,
-                                color=transit_graph.routes[current_route]['color'],
-                                geometry=geometry or {"type": "LineString", "coordinates": []},
-                                stops=current_stops
-                            ))
-                            current_stops = []
-                        
-                        current_route = route_name
-                        current_stops.append(path_stops[i])
-                
-                # Add last segment
-                if current_route and current_stops:
-                    geometry = None
-                    if current_route in transit_graph.routes:
-                        geometry = transit_graph.routes[current_route]['geometries'][0]['geometry']
-                    
-                    route_segments.append(RouteSegment(
-                        route_name=current_route,
-                        color=transit_graph.routes[current_route]['color'],
-                        geometry=geometry or {"type": "LineString", "coordinates": []},
-                        stops=current_stops
-                    ))
-                
-                # Calculate total distance
-                total_distance = 0
-                for i in range(len(path_stops) - 1):
-                    stop_a = path_stops[i]
-                    stop_b = path_stops[i + 1]
-                    total_distance += transit_graph.haversine_distance(
-                        stop_a.lat, stop_a.lng,
-                        stop_b.lat, stop_b.lng
-                    )
-                
-                new_route = SingleRoute(
-                    path_stops=path_stops,
-                    route_segments=route_segments,
-                    total_distance=round(total_distance, 2),
-                    total_time=round(total_time, 1)
-                )
+        stop_names = [
+            info['stop_name'] 
+            for info in transit_graph.stops.values()
+            if info.get('stop_name') and isinstance(info['stop_name'], str) and info['stop_name'].strip()
+        ]
+        print(f"📍 /routes/init stop names: {len(stop_names)}")
+        return {
+            "success": True,
+            "message": f"Route graph initialized successfully ({len(stop_names)} stops)",
+            "data": stop_names
+        }
+    except Exception as e:
+        print(f"❌ Initialize graph error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-                # Check if this route is already found (by exact path match)
-                # Simple check: compare stop sequence IDs
-                is_duplicate = False
-                current_path_ids_str = ",".join(path_ids)
-                for existing in found_routes:
-                    existing_path_ids = [s.stop_id for s in existing.path_stops]
-                    if ",".join(existing_path_ids) == current_path_ids_str:
-                        is_duplicate = True
-                        break
-                
-                if not is_duplicate:
-                    found_routes.append(new_route)
-                    
-                    # Penalize edges used in this path for next iteration
-                    # Add 50% penalty to edges
-                    for i in range(len(path_ids) - 1):
-                        u=path_ids[i]
-                        v=path_ids[i+1]
-                        
-                        current_penalty = penalized_edges.get((u, v), 1.0)
-                        penalized_edges[(u, v)] = current_penalty * 2.0
-                        penalized_edges[(v, u)] = current_penalty * 2.0
-                        
-            except ValueError:
-                # No path found (or no MORE paths found)
-                break
-        
-        if not found_routes:
-             raise HTTPException(status_code=404, detail="No route found")
+@app.get("/routes/init-and-get-stops")
+async def init_and_get_all_stops():
+    """
+    Initialize graph and get all stops (combined endpoint)
+    GET /routes/init-and-get-stops
+    Response: { success, message, data: [...stops] }
+    """
+    try:
+        print("📍 Initializing graph and fetching all stops...")
+        stops_list = [
+            {
+                "stop_id": stop_id,
+                "stop_name": info['stop_name'],
+                "stop_lat": info['lat'],
+                "stop_lon": info['lng']
+            }
+            for stop_id, info in transit_graph.stops.items()
+        ]
+        print(f"✓ Sending {len(stops_list)} stops to frontend")
+        return {
+            "success": True,
+            "message": f"Graph initialized and retrieved {len(stops_list)} stops",
+            "data": stops_list
+        }
+    except Exception as e:
+        print(f"❌ Init and get all stops error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-        # Construct response
-        # Fill legacy fields with the FIRST route
-        primary = found_routes[0]
+@app.post("/routes/find")
+async def find_route_by_id(request: FindRouteByIdRequest):
+    """
+    Find route between two stops (by ID)
+    POST /routes/find
+    Request: { startStopId, endStopId }
+    Response: { success, message, data: {...routeData} }
+    """
+    try:
+        if not request.startStopId or not request.endStopId:
+            raise HTTPException(status_code=400, detail="startStopId and endStopId are required")
         
-        return RouteResponse(
-            success=True,
-            routes=found_routes,
-            path_stops=primary.path_stops,
-            route_segments=primary.route_segments,
-            total_distance=primary.total_distance,
-            total_time=primary.total_time
+        print(f"🔍 Finding route: {request.startStopId} -> {request.endStopId}")
+        
+        path_ids, total_time, route_segments_info = transit_graph.find_shortest_path(
+            request.startStopId,
+            request.endStopId
         )
         
+        # Build route data matching reference backend structure
+        route_data = build_route_data(path_ids, total_time, route_segments_info)
+        
+        return {
+            "success": True,
+            "message": "Route found successfully",
+            "data": route_data
+        }
+    except ValueError as e:
+        print(f"❌ Find route error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"❌ Find route error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/routes/find/by-name")
+async def find_route_by_names(request: FindRouteByNameRequest):
+    """
+    Find route between two stops (by name)
+    POST /routes/find/by-name
+    Request: { startStopName, endStopName, maxRoutes }
+    Response: { success, message, data: { routes: [...], farePolicy: {...} } }
+    """
+    try:
+        if not request.startStopName or not request.endStopName:
+            raise HTTPException(status_code=400, detail="startStopName and endStopName are required")
+        
+        print(f"🔍 Finding route by names: {request.startStopName} -> {request.endStopName}")
+        
+        # Find start stop candidates
+        start_candidates = find_stops_by_name(request.startStopName)
+        if not start_candidates:
+            raise HTTPException(status_code=400, detail=f'No stop found matching "{request.startStopName}"')
+        
+        # Find end stop candidates
+        end_candidates = find_stops_by_name(request.endStopName)
+        if not end_candidates:
+            raise HTTPException(status_code=400, detail=f'No stop found matching "{request.endStopName}"')
+        
+        limit = max(1, request.maxRoutes or 6)
+        all_routes = []
+        seen_paths = set()
+        penalized_edges = {}
+        
+        print(f"🔍 Searching routes between {len(start_candidates)} start and {len(end_candidates)} end candidates")
+        
+        for start_stop in start_candidates:
+            for end_stop in end_candidates:
+                # Try to find multiple routes with edge penalization
+                for _ in range(3):
+                    try:
+                        path_ids, total_time, route_segments_info = transit_graph.find_shortest_path(
+                            start_stop['stop_id'],
+                            end_stop['stop_id'],
+                            penalized_edges
+                        )
+                        
+                        # Check for duplicate paths
+                        path_key = ",".join(path_ids)
+                        if path_key in seen_paths:
+                            continue
+                        seen_paths.add(path_key)
+                        
+                        # Build route data
+                        route_data = build_route_data(path_ids, total_time, route_segments_info)
+                        all_routes.append(route_data)
+                        
+                        # Penalize edges for finding alternative routes
+                        for i in range(len(path_ids) - 1):
+                            u, v = path_ids[i], path_ids[i+1]
+                            current_penalty = penalized_edges.get((u, v), 1.0)
+                            penalized_edges[(u, v)] = current_penalty * 2.0
+                            penalized_edges[(v, u)] = current_penalty * 2.0
+                        
+                        if len(all_routes) >= limit:
+                            break
+                    except ValueError:
+                        break
+                
+                if len(all_routes) >= limit:
+                    break
+            if len(all_routes) >= limit:
+                break
+        
+        if not all_routes:
+            raise HTTPException(status_code=400, detail="No route found between these stops")
+        
+        # Sort by distance and limit results
+        all_routes.sort(key=lambda r: r.get('totalDistance', float('inf')))
+        final_routes = all_routes[:limit]
+        
+        return {
+            "success": True,
+            "message": "Routes found successfully",
+            "data": {
+                "routes": final_routes,
+                "farePolicy": {
+                    "currency": "PKR",
+                    "fares": {
+                        "Red Line": 30,
+                        "Orange2 (Airport)": 90,
+                        "Blue, Green, Orange, FR-3A, FR-4, FR-6, FR-7, FR-8A, FR-8C, FR-9, FR-14": 50
+                    }
+                }
+            }
+        }
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Routing error: {str(e)}")
+        print(f"❌ Find route by names error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/routes/stop/by-name")
+async def find_stop_by_name(stopName: str = Query(..., description="Stop name to search")):
+    """
+    Find stop by name
+    GET /routes/stop/by-name?stopName=...
+    Response: { success, message, data: {...stop} }
+    """
+    try:
+        if not stopName:
+            raise HTTPException(status_code=400, detail="stopName query parameter is required")
+        
+        stops = find_stops_by_name(stopName)
+        
+        if not stops:
+            raise HTTPException(status_code=400, detail=f'No stop found matching "{stopName}"')
+        
+        # If exactly one match, return it directly
+        if len(stops) == 1:
+            return {
+                "success": True,
+                "message": "Stop found",
+                "data": {
+                    "stop_id": stops[0]['stop_id'],
+                    "stop_name": stops[0]['stop_name']
+                }
+            }
+        
+        # Multiple matches
+        return {
+            "success": True,
+            "message": "Stop found",
+            "data": {
+                "multiple": True,
+                "matches": [{"stop_id": s['stop_id'], "stop_name": s['stop_name']} for s in stops]
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Find stop by name error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/routes/nearby")
+async def find_nearby_stops(request: NearbyRequest):
+    """
+    Find nearby stops
+    POST /routes/nearby
+    Request: { stopId, radiusKm }
+    Response: { success, message, data: [...stops] }
+    """
+    try:
+        if not request.stopId:
+            raise HTTPException(status_code=400, detail="stopId is required")
+        
+        if request.stopId not in transit_graph.stops:
+            raise HTTPException(status_code=400, detail=f'Stop "{request.stopId}" not found')
+        
+        radius_km = request.radiusKm or 5
+        center_stop = transit_graph.stops[request.stopId]
+        
+        nearby = []
+        for stop_id, info in transit_graph.stops.items():
+            if stop_id == request.stopId:
+                continue
+            
+            dist = transit_graph.haversine_distance(
+                center_stop['lat'], center_stop['lng'],
+                info['lat'], info['lng']
+            )
+            
+            if dist <= radius_km:
+                nearby.append({
+                    "stop_id": stop_id,
+                    "stop_name": info['stop_name'],
+                    "stop_lat": info['lat'],
+                    "stop_lon": info['lng'],
+                    "distance_km": round(dist, 2)
+                })
+        
+        nearby.sort(key=lambda s: s['distance_km'])
+        
+        return {
+            "success": True,
+            "message": f"Found {len(nearby)} nearby stops",
+            "data": nearby
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Find nearby error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/routes/stops")
+async def get_all_stops():
+    """
+    Get all stops
+    GET /routes/stops
+    Response: { success, message, data: [...stops] }
+    """
+    try:
+        print("📍 Fetching all stops...")
+        stops_list = [
+            {
+                "stop_id": stop_id,
+                "stop_name": info['stop_name'],
+                "stop_lat": info['lat'],
+                "stop_lon": info['lng']
+            }
+            for stop_id, info in transit_graph.stops.items()
+        ]
+        
+        return {
+            "success": True,
+            "message": f"Retrieved {len(stops_list)} stops",
+            "data": stops_list
+        }
+    except Exception as e:
+        print(f"❌ Get all stops error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/routes/search")
+async def search_stops(query: str = Query(..., description="Search query")):
+    """
+    Search stops by name
+    GET /routes/search?query=...
+    Response: { success, message, data: [...stops] }
+    """
+    try:
+        if not query:
+            raise HTTPException(status_code=400, detail="Search query is required")
+        
+        search_lower = query.lower()
+        matching_stops = [
+            {
+                "stop_id": stop_id,
+                "stop_name": info['stop_name'],
+                "stop_lat": info['lat'],
+                "stop_lon": info['lng']
+            }
+            for stop_id, info in transit_graph.stops.items()
+            if search_lower in info['stop_name'].lower()
+        ]
+        
+        return {
+            "success": True,
+            "message": f'Found {len(matching_stops)} stops matching "{query}"',
+            "data": matching_stops
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Search stops error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/routes/stats")
+async def get_stats():
+    """
+    Get graph statistics
+    GET /routes/stats
+    Response: { success, message, data: {...stats} }
+    """
+    try:
+        total_connections = sum(len(edges) for edges in transit_graph.edges.values())
+        
+        max_connections = 0
+        busy_stop = None
+        for stop_id, edges in transit_graph.edges.items():
+            if len(edges) > max_connections:
+                max_connections = len(edges)
+                busy_stop = transit_graph.stops[stop_id]['stop_name']
+        
+        stats = {
+            "totalStops": len(transit_graph.stops),
+            "totalConnections": total_connections,
+            "averageConnectionsPerStop": round(total_connections / len(transit_graph.stops), 2) if transit_graph.stops else 0,
+            "busyStop": busy_stop,
+            "busyStopConnections": max_connections,
+            "graphBuiltAt": None  # Could track this if needed
+        }
+        
+        return {
+            "success": True,
+            "message": "Graph statistics retrieved",
+            "data": stats
+        }
+    except Exception as e:
+        print(f"❌ Get stats error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/routes/rebuild")
+async def rebuild_graph():
+    """
+    Rebuild the graph
+    POST /routes/rebuild
+    Response: { success, message }
+    """
+    try:
+        print("🔄 Rebuilding graph...")
+        # In this implementation, graph is built on startup from GeoJSON
+        # Rebuild would reload the data
+        base_path = Path(__file__).parent.parent / "public"
+        stops_file = base_path / "stops.geojson"
+        routes_file = base_path / "routes.geojson"
+        
+        # Clear and reload
+        transit_graph.stops = {}
+        transit_graph.edges = {}
+        transit_graph.routes = {}
+        transit_graph.load_from_geojson(str(stops_file), str(routes_file))
+        
+        return {
+            "success": True,
+            "message": "Graph rebuilt successfully"
+        }
+    except Exception as e:
+        print(f"❌ Rebuild graph error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
 def health_check():
+    """Health check endpoint"""
     return {"status": "healthy", "graph_loaded": len(transit_graph.stops) > 0}
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def find_stops_by_name(stop_name: str) -> List[Dict]:
+    """Find stops matching the given name"""
+    search_term = stop_name.lower()
+    
+    # Exact matches first
+    exact_matches = [
+        {"stop_id": stop_id, "stop_name": info['stop_name'], "lat": info['lat'], "lng": info['lng']}
+        for stop_id, info in transit_graph.stops.items()
+        if info['stop_name'].lower() == search_term
+    ]
+    
+    if exact_matches:
+        return exact_matches
+    
+    # Partial matches
+    partial_matches = [
+        {"stop_id": stop_id, "stop_name": info['stop_name'], "lat": info['lat'], "lng": info['lng']}
+        for stop_id, info in transit_graph.stops.items()
+        if search_term in info['stop_name'].lower()
+    ]
+    
+    return partial_matches
+
+def build_route_data(path_ids: List[str], total_time: float, route_segments_info: List[Dict]) -> Dict:
+    """Build route data matching reference backend structure"""
+    # Build route stops
+    route_stops = []
+    for stop_id in path_ids:
+        stop = transit_graph.stops[stop_id]
+        route_stops.append({
+            "stop_id": stop_id,
+            "stop_name": stop['stop_name'],
+            "stop_lat": stop['lat'],
+            "stop_lon": stop['lng']
+        })
+    
+    # Calculate total distance
+    total_distance = 0
+    for i in range(len(route_stops) - 1):
+        stop_a = route_stops[i]
+        stop_b = route_stops[i + 1]
+        total_distance += transit_graph.haversine_distance(
+            stop_a['stop_lat'], stop_a['stop_lon'],
+            stop_b['stop_lat'], stop_b['stop_lon']
+        )
+    
+    # Build route segments
+    segments = []
+    buses_used = set()
+    bus_sequence = []
+    current_route = None
+    current_segment_stops = []
+    segment_start_idx = 0
+    
+    for i, route_info in enumerate(route_segments_info):
+        if route_info:
+            route_name = route_info.get('route_name', 'Unknown')
+            
+            if current_route and current_route != route_name:
+                # Save previous segment
+                segments.append({
+                    "routeName": current_route.upper(),
+                    "routeId": current_route.lower(),
+                    "stops": current_segment_stops,
+                    "stopCount": len(current_segment_stops),
+                    "distance": round(calculate_segment_distance(current_segment_stops), 2),
+                    "boardingStop": current_segment_stops[0]['stop_name'] if current_segment_stops else "Unknown",
+                    "alightingStop": current_segment_stops[-1]['stop_name'] if current_segment_stops else "Unknown"
+                })
+                current_segment_stops = []
+            
+            if route_name != current_route:
+                buses_used.add(route_name)
+                bus_sequence.append(route_name)
+            
+            current_route = route_name
+            if i < len(route_stops):
+                current_segment_stops.append(route_stops[i])
+    
+    # Add last segment
+    if current_route and current_segment_stops:
+        # Add the final stop if not already included
+        if len(route_stops) > len(route_segments_info):
+            current_segment_stops.append(route_stops[-1])
+        
+        segments.append({
+            "routeName": current_route.upper(),
+            "routeId": current_route.lower(),
+            "stops": current_segment_stops,
+            "stopCount": len(current_segment_stops),
+            "distance": round(calculate_segment_distance(current_segment_stops), 2),
+            "boardingStop": current_segment_stops[0]['stop_name'] if current_segment_stops else "Unknown",
+            "alightingStop": current_segment_stops[-1]['stop_name'] if current_segment_stops else "Unknown"
+        })
+    
+    # Calculate fare (simplified)
+    fare_map = {
+        'red': 30,
+        'orange2': 90,
+        'orange': 50,
+        'blue': 50,
+        'green': 50
+    }
+    
+    total_fare = 0
+    fare_details = []
+    for bus in buses_used:
+        bus_lower = bus.lower()
+        fare = 50  # Default
+        for key, value in fare_map.items():
+            if key in bus_lower:
+                fare = value
+                break
+        total_fare += fare
+        fare_details.append({"route": bus.upper(), "fare": fare})
+    
+    # Estimate time (30 km/h average + 0.5 min per stop)
+    estimated_minutes = round((total_distance / 30) * 60 + 0.5 * max(0, len(route_stops) - 1))
+    
+    return {
+        "routeStops": route_stops,
+        "numberOfStops": len(route_stops),
+        "totalDistance": round(total_distance, 2),
+        "estimatedMinutes": estimated_minutes,
+        "fare": {
+            "amount": total_fare,
+            "currency": "PKR",
+            "routes": [b.upper() for b in buses_used],
+            "fareDetails": fare_details
+        },
+        "transferCount": max(0, len(bus_sequence) - 1),
+        "busesUsed": [b.upper() for b in buses_used],
+        "busSequence": [b.upper() for b in bus_sequence],
+        "routeSegments": segments
+    }
+
+def calculate_segment_distance(stops: List[Dict]) -> float:
+    """Calculate total distance for a segment"""
+    total = 0
+    for i in range(len(stops) - 1):
+        total += transit_graph.haversine_distance(
+            stops[i].get('stop_lat', stops[i].get('lat', 0)),
+            stops[i].get('stop_lon', stops[i].get('lng', 0)),
+            stops[i+1].get('stop_lat', stops[i+1].get('lat', 0)),
+            stops[i+1].get('stop_lon', stops[i+1].get('lng', 0))
+        )
+    return total
 
 # ============================================================================
 # RUN SERVER
