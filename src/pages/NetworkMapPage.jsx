@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, GeoJSON, useMap, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Map, Info, Bus, Train, Eye, EyeOff, Filter, Layers, Search, X, MapPin } from 'lucide-react';
+import { Map, Info, Bus, Train, Eye, EyeOff, Filter, Layers, Search, X, MapPin, Navigation, Loader, XCircle, Clock, Route as RouteIcon } from 'lucide-react';
 import { useGlobalContext } from '../context/GlobalContext';
 import { useLocation } from 'react-router-dom';
 
@@ -54,6 +54,36 @@ const MapController = ({ targetLocation }) => {
     return null;
 };
 
+// Component to handle tile layer changes (dark mode)
+const TileLayerController = ({ isDarkMode }) => {
+    const map = useMap();
+    
+    useEffect(() => {
+        // Remove all existing tile layers
+        map.eachLayer((layer) => {
+            if (layer instanceof L.TileLayer) {
+                map.removeLayer(layer);
+            }
+        });
+        
+        // Add appropriate tile layer
+        const tileUrl = isDarkMode
+            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+            : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+        
+        const attribution = isDarkMode
+            ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+        
+        L.tileLayer(tileUrl, {
+            attribution: attribution,
+            maxZoom: 19
+        }).addTo(map);
+    }, [isDarkMode, map]);
+    
+    return null;
+};
+
 const NetworkMapPage = () => {
     const { t } = useGlobalContext();
     const location = useLocation();
@@ -69,6 +99,18 @@ const NetworkMapPage = () => {
     const mapRef = useRef(null);
     const searchRef = useRef(null);
     const ZOOM_THRESHOLD = 14;
+    
+    // ========== ROUTING STATE ==========
+    const [routingMode, setRoutingMode] = useState(false);
+    const [routingDestination, setRoutingDestination] = useState(null);
+    const [showSourceSearch, setShowSourceSearch] = useState(false);
+    const [sourceSearchQuery, setSourceSearchQuery] = useState('');
+    const [filteredSourceStops, setFilteredSourceStops] = useState([]);
+    const [routingLoading, setRoutingLoading] = useState(false);
+    const [routingData, setRoutingData] = useState(null);
+    const [routingError, setRoutingError] = useState(null);
+    const [isDarkMode, setIsDarkMode] = useState(false);
+    const sourceSearchRef = useRef(null);
 
     // Helper function to extract base route name
     const getBaseRouteName = (shapeId) => {
@@ -226,6 +268,99 @@ const NetworkMapPage = () => {
 
     const allVisible = Object.values(routes).every(r => r.visible);
     const visibleCount = Object.values(routes).filter(r => r.visible).length;
+    
+    // ========== ROUTING FUNCTIONS ==========
+    
+    const handleStartRouting = (stop) => {
+        setRoutingDestination(stop);
+        setRoutingMode(true);
+        setShowSourceSearch(true);
+        setIsDarkMode(false);  // Start in light mode
+    };
+    
+    const handleSourceSearch = (query) => {
+        setSourceSearchQuery(query);
+        if (query.trim() === '') {
+            setFilteredSourceStops([]);
+            return;
+        }
+        
+        const filtered = stopsList.filter(s => 
+            s.name.toLowerCase().includes(query.toLowerCase()) &&
+            s.name !== routingDestination.name  // Exclude destination
+        );
+        setFilteredSourceStops(filtered);
+    };
+    
+    const handleSourceSelect = async (sourceStop) => {
+        setShowSourceSearch(false);
+        setSourceSearchQuery('');
+        setFilteredSourceStops([]);
+        setRoutingLoading(true);
+        setRoutingError(null);
+        
+        try {
+            // Call routing API
+            const response = await fetch('http://localhost:8000/find-route', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    source_stop_id: findStopIdByName(sourceStop.name),
+                    destination_stop_id: findStopIdByName(routingDestination.name)
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error('Route not found');
+            }
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                setRoutingData(data);
+                setIsDarkMode(true);  // Switch to dark mode
+                setCurrentZoom(13);   // Zoom out to see full route
+            } else {
+                setRoutingError(data.error || 'Failed to find route');
+            }
+        } catch (error) {
+            console.error('Routing error:', error);
+            setRoutingError('Failed to connect to routing service. Make sure the backend is running on port 8000.');
+        } finally {
+            setRoutingLoading(false);
+        }
+    };
+    
+    const handleClearRouting = () => {
+        setRoutingMode(false);
+        setRoutingDestination(null);
+        setRoutingData(null);
+        setRoutingError(null);
+        setShowSourceSearch(false);
+        setSourceSearchQuery('');
+        setFilteredSourceStops([]);
+        setIsDarkMode(false);
+        setRoutingLoading(false);
+    };
+    
+    const findStopIdByName = (stopName) => {
+        const stop = stopsList.find(s => s.name === stopName);
+        if (!stop) {
+            // Find in GeoJSON
+            const feature = stops.features.find(f => f.properties.stop_name === stopName);
+            return feature ? feature.properties.stop_id : null;
+        }
+        
+        // Find in original GeoJSON data
+        const feature = stops.features.find(f => 
+            f.properties.stop_name === stopName ||
+            (f.geometry.coordinates[1] === stop.lat && f.geometry.coordinates[0] === stop.lng)
+        );
+        
+        return feature ? feature.properties.stop_id : null;
+    };
 
     // Style function for routes
     const routeStyle = (feature, routeColor) => {
@@ -260,9 +395,44 @@ const NetworkMapPage = () => {
     // On each feature function for stops
     const onEachStop = (feature, layer) => {
         if (feature.properties && feature.properties.stop_name) {
-            layer.bindPopup(`<b>${feature.properties.stop_name}</b>`);
+            const stopName = feature.properties.stop_name;
+            const coords = feature.geometry.coordinates;
+            
+            const popupContent = `
+                <div class="font-sans">
+                    <div class="font-bold text-gray-900 mb-2">${stopName}</div>
+                    ${!routingMode ? `
+                        <button 
+                            onclick="window.startRoutingFromStop('${stopName}', ${coords[1]}, ${coords[0]})"
+                            class="flex items-center gap-2 px-3 py-2 bg-accent-orange text-white rounded-lg hover:bg-orange-600 transition-colors w-full justify-center font-medium text-sm"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 16 16 12 12 8"></polyline>
+                                <line x1="8" y1="12" x2="16" y2="12"></line>
+                            </svg>
+                            Start Routing Here
+                        </button>
+                    ` : ''}
+                </div>
+            `;
+            
+            layer.bindPopup(popupContent, {
+                className: 'custom-popup'
+            });
         }
     };
+    
+    // Global function for popup button
+    useEffect(() => {
+        window.startRoutingFromStop = (stopName, lat, lng) => {
+            handleStartRouting({ name: stopName, lat, lng });
+        };
+        
+        return () => {
+            delete window.startRoutingFromStop;
+        };
+    }, [routingMode]);
 
     return (
         <div className="pt-24 pb-12 px-4 min-h-screen bg-gray-50 flex flex-col font-sans">
@@ -287,6 +457,9 @@ const NetworkMapPage = () => {
                 }
                 .leaflet-popup-content {
                     margin: 10px 14px;
+                }
+                .custom-popup .leaflet-popup-content-wrapper {
+                    padding: 0;
                 }
             `}</style>
             
@@ -351,6 +524,176 @@ const NetworkMapPage = () => {
                         </div>
                     )}
                 </div>
+
+                {/* ========== ROUTING UI OVERLAYS ========== */}
+                
+                {/* Source Search Overlay */}
+                {showSourceSearch && routingDestination && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-start justify-center pt-32" onClick={() => setShowSourceSearch(false)}>
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4" onClick={(e) => e.stopPropagation()} ref={sourceSearchRef}>
+                            <div className="p-6 border-b border-gray-100">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-xl font-bold text-gray-900">Select Starting Stop</h3>
+                                    <button
+                                        onClick={() => {
+                                            setShowSourceSearch(false);
+                                            setSourceSearchQuery('');
+                                        }}
+                                        className="text-gray-400 hover:text-gray-600"
+                                    >
+                                        <XCircle className="w-6 h-6" />
+                                    </button>
+                                </div>
+                                
+                                <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <Navigation className="w-5 h-5 text-accent-orange" />
+                                        <div>
+                                            <p className="text-sm text-gray-600">Destination</p>
+                                            <p className="font-bold text-gray-900">{routingDestination.name}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <Search className="w-5 h-5 text-gray-400" />
+                                    </div>
+                                    <input
+                                        type="text"
+                                        value={sourceSearchQuery}
+                                        onChange={(e) => handleSourceSearch(e.target.value)}
+                                        placeholder="Search for your starting stop..."
+                                        className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-accent-orange transition-colors text-gray-900 placeholder-gray-400"
+                                        autoFocus
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div className="max-h-96 overflow-y-auto">
+                                {filteredSourceStops.length > 0 ? (
+                                    filteredSourceStops.map((stop, index) => (
+                                        <button
+                                            key={index}
+                                            onClick={() => handleSourceSelect(stop)}
+                                            className="w-full px-6 py-4 text-left hover:bg-orange-50 transition-colors flex items-center gap-3 border-b border-gray-100 last:border-b-0"
+                                        >
+                                            <MapPin className="w-5 h-5 text-accent-orange flex-shrink-0" />
+                                            <div className="flex-grow">
+                                                <p className="font-medium text-gray-900">{stop.name}</p>
+                                                <p className="text-xs text-gray-500">
+                                                    {stop.lat.toFixed(4)}, {stop.lng.toFixed(4)}
+                                                </p>
+                                            </div>
+                                            <Navigation className="w-4 h-4 text-gray-400" />
+                                        </button>
+                                    ))
+                                ) : sourceSearchQuery ? (
+                                    <div className="px-6 py-12 text-center text-gray-500">
+                                        No stops found matching "{sourceSearchQuery}"
+                                    </div>
+                                ) : (
+                                    <div className="px-6 py-12 text-center text-gray-500">
+                                        Start typing to search for a stop...
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+                
+                {/* Loading Overlay */}
+                {routingLoading && (
+                    <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center">
+                        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md mx-4 text-center">
+                            <div className="flex justify-center mb-4">
+                                <Loader className="w-12 h-12 text-accent-orange animate-spin" />
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900 mb-2">Finding Best Route...</h3>
+                            <p className="text-gray-600">Calculating optimal path using Dijkstra's algorithm</p>
+                        </div>
+                    </div>
+                )}
+                
+                {/* Clear Routing Button */}
+                {routingMode && routingData && (
+                    <div className="fixed bottom-8 right-8 z-40">
+                        <button
+                            onClick={handleClearRouting}
+                            className="flex items-center gap-3 px-6 py-4 bg-white border-2 border-gray-200 rounded-2xl shadow-2xl hover:shadow-xl transition-all group"
+                        >
+                            <XCircle className="w-6 h-6 text-gray-600 group-hover:text-red-500 transition-colors" />
+                            <div className="text-left">
+                                <p className="font-bold text-gray-900">Clear Route</p>
+                                <p className="text-xs text-gray-500">Return to normal view</p>
+                            </div>
+                        </button>
+                    </div>
+                )}
+                
+                {/* Routing Info Panel */}
+                {routingMode && routingData && (
+                    <div className="fixed top-28 left-1/2 transform -translate-x-1/2 z-40 w-full max-w-2xl px-4">
+                        <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-2xl shadow-2xl p-6">
+                            <div className="flex items-start justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                    <RouteIcon className="w-6 h-6" />
+                                    <h3 className="text-xl font-bold">Route Found!</h3>
+                                </div>
+                                <button onClick={handleClearRouting} className="text-white hover:text-gray-200">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-4 mb-4">
+                                <div className="bg-white bg-opacity-20 rounded-xl p-3">
+                                    <p className="text-xs opacity-90 mb-1">Distance</p>
+                                    <p className="text-2xl font-bold">{routingData.total_distance} km</p>
+                                </div>
+                                <div className="bg-white bg-opacity-20 rounded-xl p-3">
+                                    <p className="text-xs opacity-90 mb-1">Time</p>
+                                    <p className="text-2xl font-bold">{routingData.total_time} min</p>
+                                </div>
+                                <div className="bg-white bg-opacity-20 rounded-xl p-3">
+                                    <p className="text-xs opacity-90 mb-1">Stops</p>
+                                    <p className="text-2xl font-bold">{routingData.path_stops.length}</p>
+                                </div>
+                            </div>
+                            
+                            <div className="bg-white bg-opacity-10 rounded-xl p-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <MapPin className="w-4 h-4" />
+                                    <span className="text-sm font-medium">From: {routingData.path_stops[0].stop_name}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Navigation className="w-4 h-4" />
+                                    <span className="text-sm font-medium">To: {routingData.path_stops[routingData.path_stops.length - 1].stop_name}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                
+                {/* Error Message */}
+                {routingError && (
+                    <div className="fixed top-28 left-1/2 transform -translate-x-1/2 z-40 w-full max-w-2xl px-4">
+                        <div className="bg-red-50 border-2 border-red-200 rounded-2xl shadow-xl p-6">
+                            <div className="flex items-start gap-4">
+                                <XCircle className="w-6 h-6 text-red-500 flex-shrink-0 mt-1" />
+                                <div className="flex-grow">
+                                    <h3 className="text-lg font-bold text-red-900 mb-2">Routing Error</h3>
+                                    <p className="text-red-700">{routingError}</p>
+                                </div>
+                                <button
+                                    onClick={() => setRoutingError(null)}
+                                    className="text-red-400 hover:text-red-600"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div className="flex flex-col lg:flex-row gap-6 h-[600px] flex-grow">
 
@@ -463,16 +806,12 @@ const NetworkMapPage = () => {
                             style={{ height: '100%', width: '100%' }}
                             ref={mapRef}
                         >
-                            <TileLayer
-                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                            />
-                            
+                            <TileLayerController isDarkMode={isDarkMode} />
                             <ZoomHandler setCurrentZoom={setCurrentZoom} />
                             <MapController targetLocation={selectedStop} />
                             
-                            {/* Render visible routes */}
-                            {Object.keys(routes).map(routeName => {
+                            {/* Render normal routes when NOT in routing mode */}
+                            {!routingMode && Object.keys(routes).map(routeName => {
                                 const route = routes[routeName];
                                 if (!route.visible) return null;
                                 
@@ -489,13 +828,71 @@ const NetworkMapPage = () => {
                                 );
                             })}
                             
-                            {/* Render stops when zoomed in */}
-                            {stops && currentZoom >= ZOOM_THRESHOLD && (
+                            {/* Render normal stops when NOT in routing mode */}
+                            {!routingMode && stops && currentZoom >= ZOOM_THRESHOLD && (
                                 <GeoJSON
                                     data={stops}
                                     pointToLayer={pointToLayer}
                                     onEachFeature={onEachStop}
                                 />
+                            )}
+                            
+                            {/* Render ROUTING visualization when in routing mode */}
+                            {routingMode && routingData && (
+                                <>
+                                    {/* Render route segments with colors */}
+                                    {routingData.route_segments.map((segment, index) => (
+                                        <GeoJSON
+                                            key={`route-segment-${index}`}
+                                            data={segment.geometry}
+                                            style={{
+                                                color: segment.color,
+                                                weight: 6,
+                                                opacity: 0.9,
+                                                lineCap: 'round',
+                                                lineJoin: 'round'
+                                            }}
+                                        />
+                                    ))}
+                                    
+                                    {/* Render route stops as markers */}
+                                    {routingData.path_stops.map((stop, index) => {
+                                        const isStart = index === 0;
+                                        const isEnd = index === routingData.path_stops.length - 1;
+                                        
+                                        const icon = L.divIcon({
+                                            className: 'custom-marker',
+                                            html: `
+                                                <div class="flex items-center justify-center">
+                                                    <div class="w-8 h-8 rounded-full ${
+                                                        isStart ? 'bg-green-500' : isEnd ? 'bg-red-500' : 'bg-blue-500'
+                                                    } border-4 border-white shadow-lg flex items-center justify-center text-white font-bold text-xs">
+                                                        ${isStart ? 'A' : isEnd ? 'B' : index}
+                                                    </div>
+                                                </div>
+                                            `,
+                                            iconSize: [32, 32],
+                                            iconAnchor: [16, 16]
+                                        });
+                                        
+                                        return (
+                                            <Marker
+                                                key={`stop-${index}`}
+                                                position={[stop.lat, stop.lng]}
+                                                icon={icon}
+                                            >
+                                                <Popup>
+                                                    <div className="font-sans">
+                                                        <p className="font-bold text-gray-900">{stop.stop_name}</p>
+                                                        <p className="text-xs text-gray-500 mt-1">
+                                                            {isStart ? 'Starting Point' : isEnd ? 'Destination' : `Stop ${index}`}
+                                                        </p>
+                                                    </div>
+                                                </Popup>
+                                            </Marker>
+                                        );
+                                    })}
+                                </>
                             )}
                         </MapContainer>
                     </div>
