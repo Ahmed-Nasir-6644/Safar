@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapPin, ArrowRightLeft, Search, Loader2, ChevronDown, ChevronUp, Bus, Clock, TrendingUp, Volume2, X } from 'lucide-react';
+import { MapPin, ArrowRightLeft, Search, Loader2, ChevronDown, ChevronUp, Bus, Clock, TrendingUp, Volume2, X, Heart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useGlobalContext } from '../context/GlobalContext';
 import useRoutes from '../hooks/useRoutes';
+import { routesAPI } from '../utils/api';
 
 const RouteSearchSection = () => {
     const { findRoute, getAllStops, getStats, searchStops, loading, error, routeData } = useRoutes();
@@ -25,6 +26,10 @@ const RouteSearchSection = () => {
     const [dictatingRoutes, setDictatingRoutes] = useState({});
     const [speakingRoutes, setSpeakingRoutes] = useState({});
     const [dictationErrors, setDictationErrors] = useState({});
+    const [favoriteRoutes, setFavoriteRoutes] = useState({});
+    const [savingFavoriteRoutes, setSavingFavoriteRoutes] = useState({});
+    const [favoriteMessage, setFavoriteMessage] = useState('');
+    const [favoriteError, setFavoriteError] = useState('');
     const intentionalStopRef = useRef({});
     const fromInputRef = useRef(null);
     const toInputRef = useRef(null);
@@ -433,6 +438,59 @@ const RouteSearchSection = () => {
         return colors[routeName?.toUpperCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
     };
 
+    const getRouteFavoriteKey = (route) => {
+        const sequence = Array.isArray(route?.busSequence) ? route.busSequence.join('-') : 'no-bus';
+        const from = route?.routeSegments?.[0]?.boardingStop || route?.routeStops?.[0]?.stop_name || 'unknown-from';
+        const to = route?.routeSegments?.[route?.routeSegments?.length - 1]?.alightingStop || route?.routeStops?.[route?.routeStops?.length - 1]?.stop_name || 'unknown-to';
+        const distance = Number.isFinite(route?.totalDistance) ? route.totalDistance.toFixed(2) : 'na';
+        return `${from}::${to}::${sequence}::${distance}`;
+    };
+
+    const toggleFavoriteRoute = async (route) => {
+        const key = getRouteFavoriteKey(route);
+        const isAlreadyFavorite = !!favoriteRoutes[key];
+
+        if (isAlreadyFavorite) {
+            setFavoriteRoutes(prev => ({
+                ...prev,
+                [key]: false
+            }));
+            setFavoriteError('');
+            setFavoriteMessage('Route removed from favourites.');
+            return;
+        }
+
+        const fallbackFrom = route?.routeSegments?.[0]?.boardingStop || route?.routeStops?.[0]?.stop_name || fromStopName || fromQuery;
+        const fallbackTo = route?.routeSegments?.[route?.routeSegments?.length - 1]?.alightingStop || route?.routeStops?.[route?.routeStops?.length - 1]?.stop_name || toStopName || toQuery;
+
+        try {
+            setSavingFavoriteRoutes(prev => ({ ...prev, [key]: true }));
+            setFavoriteMessage('');
+            setFavoriteError('');
+
+            await routesAPI.saveFavoriteRoute({
+                startingPoint: fallbackFrom,
+                destination: fallbackTo,
+                tripName: `${fallbackFrom} to ${fallbackTo}`,
+                routeData: route,
+            });
+
+            setFavoriteRoutes(prev => ({
+                ...prev,
+                [key]: true
+            }));
+            setFavoriteMessage('Route added to favourites successfully.');
+        } catch (err) {
+            setFavoriteError(err.message || 'Failed to save favourite route.');
+        } finally {
+            setSavingFavoriteRoutes(prev => {
+                const nextState = { ...prev };
+                delete nextState[key];
+                return nextState;
+            });
+        }
+    };
+
     const displayFromStops = fromQuery.length > 0 ? filteredFromStops : allStops;
     const displayToStops = toQuery.length > 0 ? filteredToStops : allStops;
 
@@ -596,6 +654,18 @@ const RouteSearchSection = () => {
                     </div>
                 )}
 
+                {favoriteError && (
+                    <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                        {favoriteError}
+                    </div>
+                )}
+
+                {favoriteMessage && (
+                    <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
+                        {favoriteMessage}
+                    </div>
+                )}
+
                 {routes.length > 0 && (
                     <div className="mt-8 space-y-6">
                         <h3 className="text-2xl font-bold text-gray-900 mb-4">
@@ -608,6 +678,9 @@ const RouteSearchSection = () => {
                                 const isSelected = selectedRouteIndex === routeIndex;
                                 const estimatedMinutes = route.estimatedMinutes || Math.ceil(route.totalDistance * 2);
                                 const isDirect = route.transferCount === 0;
+                                const favoriteKey = getRouteFavoriteKey(route);
+                                const isFavorite = !!favoriteRoutes[favoriteKey];
+                                const isSavingFavorite = !!savingFavoriteRoutes[favoriteKey];
                                 
                                 return (
                                     <div
@@ -669,6 +742,25 @@ const RouteSearchSection = () => {
                                                             <X className="w-5 h-5" />
                                                         ) : (
                                                             <Volume2 className="w-5 h-5" />
+                                                        )}
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            toggleFavoriteRoute(route);
+                                                        }}
+                                                        disabled={isSavingFavorite}
+                                                        className={`p-2 rounded-full transition-all ${
+                                                            isFavorite
+                                                                ? 'bg-pink-50 text-pink-600 hover:bg-pink-100 hover:scale-110'
+                                                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:scale-110'
+                                                        }`}
+                                                        title={isFavorite ? 'Remove from favourites' : 'Add to favourites'}
+                                                    >
+                                                        {isSavingFavorite ? (
+                                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                                        ) : (
+                                                            <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
                                                         )}
                                                     </button>
                                                     <ChevronDown

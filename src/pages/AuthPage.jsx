@@ -4,7 +4,7 @@ import { useGlobalContext } from '../context/GlobalContext';
 
 const AuthPage = () => {
     const [isLogin, setIsLogin] = useState(true);
-    const { login, register, user } = useAuth();
+    const { login, signup, user } = useGlobalContext();
     const [isLoading, setIsLoading] = useState(false);
     const [authError, setAuthError] = useState('');
 
@@ -32,7 +32,7 @@ const AuthPage = () => {
             if (isLogin) {
                 await login(email, password);
             } else {
-                await register(name, email, password);
+                await signup(name, email, password);
                 // On successful signup, switch to login mode
                 setSuccessMessage('Registration successful! Please login with your credentials.');
                 setIsLogin(true);

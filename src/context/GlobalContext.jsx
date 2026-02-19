@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const GlobalContext = createContext();
+const AUTH_API_URL = 'http://localhost:5000/auth';
 
 export const GlobalProvider = ({ children }) => {
     // Auth State
@@ -38,6 +39,7 @@ export const GlobalProvider = ({ children }) => {
 
             // Navbar & Profile
             myHistory: "My History",
+            myFavorites: "My Favorites",
             englishAbbr: "EN",
             urduAbbr: "UR",
 
@@ -95,7 +97,10 @@ export const GlobalProvider = ({ children }) => {
 
             // History Page
             tripHistory: "Trip History",
+            favoriteRoutes: "Favorite Routes",
             trips: "Trips",
+            favorites: "Favorites",
+            noFavorites: "No favorite routes saved yet.",
             noTrips: "No trips recorded yet.",
 
             // Help Page
@@ -184,6 +189,7 @@ export const GlobalProvider = ({ children }) => {
 
             // Navbar & Profile
             myHistory: "میری تاریخ",
+            myFavorites: "میرے پسندیدہ",
             englishAbbr: "انگریزی",
             urduAbbr: "اردو",
 
@@ -242,7 +248,10 @@ export const GlobalProvider = ({ children }) => {
 
             // History Page
             tripHistory: "سفر کی تاریخ",
+            favoriteRoutes: "پسندیدہ راستے",
             trips: "دورے",
+            favorites: "پسندیدہ",
+            noFavorites: "ابھی تک کوئی پسندیدہ راستہ محفوظ نہیں کیا گیا۔",
             noTrips: "ابھی تک کوئی دورہ ریکارڈ نہیں ہوا۔۔",
 
             // Footer
@@ -335,36 +344,64 @@ export const GlobalProvider = ({ children }) => {
         setLoading(false);
     }, []);
 
-    const login = (email, password) => {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                const mockUser = {
-                    name: "Demo User",
-                    email: email || "demo@metromate.com"
-                };
-                setUser(mockUser);
-                localStorage.setItem('user', JSON.stringify(mockUser));
-                resolve(mockUser);
-            }, 800);
+    const login = async (email, password) => {
+        const response = await fetch(`${AUTH_API_URL}/login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email, password }),
         });
+
+        if (!response.ok) {
+            let errorMessage = 'Login failed';
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.message || errorMessage;
+            } catch {
+                errorMessage = `Server error: ${response.status}`;
+            }
+            throw new Error(errorMessage);
+        }
+
+        const data = await response.json();
+        const { accessToken, refreshToken, user: userData } = data.data;
+
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', refreshToken);
+        localStorage.setItem('user', JSON.stringify(userData));
+        setUser(userData);
+
+        return userData;
     };
 
-    const signup = (name, email, password) => {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                const mockUser = {
-                    name: name || "Demo User",
-                    email: email || "demo@metromate.com"
-                };
-                setUser(mockUser);
-                localStorage.setItem('user', JSON.stringify(mockUser));
-                resolve(mockUser);
-            }, 800);
+    const signup = async (name, email, password) => {
+        const response = await fetch(`${AUTH_API_URL}/register`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name, email, password }),
         });
+
+        if (!response.ok) {
+            let errorMessage = 'Registration failed';
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.message || errorMessage;
+            } catch {
+                errorMessage = `Server error: ${response.status}`;
+            }
+            throw new Error(errorMessage);
+        }
+
+        return response.json();
     };
 
     const logout = () => {
         setUser(null);
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
     };
 

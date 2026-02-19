@@ -118,6 +118,24 @@ export const routesAPI = {
         return authenticatedFetch(`/routes/search?query=${encodeURIComponent(query)}`);
     },
 
+    // Get current user's route search history
+    getSearchHistory: async () => {
+        return authenticatedFetch('/routes/search-history');
+    },
+
+    // Save selected route as favorite for current user
+    saveFavoriteRoute: async (favoriteRouteData) => {
+        return authenticatedFetch('/routes/favorite', {
+            method: 'POST',
+            body: JSON.stringify(favoriteRouteData),
+        });
+    },
+
+    // Get current user's saved favorite routes
+    getFavoriteRoutes: async () => {
+        return authenticatedFetch('/routes/favorite');
+    },
+
     // Get graph statistics
     getStats: async () => {
         return authenticatedFetch('/routes/stats');

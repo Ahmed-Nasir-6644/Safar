@@ -1,9 +1,56 @@
-import React from 'react';
-import { Calendar, MapPin, Clock, ArrowRight } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Calendar, MapPin } from 'lucide-react';
 import { useGlobalContext } from '../context/GlobalContext';
+import { routesAPI } from '../utils/api';
+import { useNavigate } from 'react-router-dom';
 
 const HistoryPage = () => {
-    const { history, t } = useGlobalContext();
+    const { t } = useGlobalContext();
+    const navigate = useNavigate();
+    const [history, setHistory] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState('');
+
+    const normalizeHistoryItems = (payload) => {
+        const rawItems = Array.isArray(payload)
+            ? payload
+            : Array.isArray(payload?.data)
+                ? payload.data
+                : [];
+
+        return rawItems.map((item, index) => {
+            const createdAt = item?.createdAt || item?.updatedAt;
+            const dateLabel = createdAt
+                ? new Date(createdAt).toLocaleDateString()
+                : '-';
+
+            return {
+                id: item?._id || `${item?.startingPoint || 'trip'}-${item?.destination || 'item'}-${index}`,
+                from: item?.startingPoint || '-',
+                to: item?.destination || '-',
+                date: dateLabel,
+                fare: item?.fare || item?.estimatedFare || '-',
+            };
+        });
+    };
+
+    useEffect(() => {
+        const fetchHistory = async () => {
+            try {
+                setIsLoading(true);
+                setError('');
+                const response = await routesAPI.getSearchHistory();
+                setHistory(normalizeHistoryItems(response));
+            } catch (fetchError) {
+                setError(fetchError.message || 'Failed to load trip history.');
+                setHistory([]);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchHistory();
+    }, []);
 
     return (
         <div className="pt-24 pb-12 px-4 min-h-screen bg-gray-50">
@@ -15,10 +62,32 @@ const HistoryPage = () => {
                     </span>
                 </div>
 
+                {error && (
+                    <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {error}
+                    </div>
+                )}
+
                 <div className="space-y-4">
-                    {history.length > 0 ? (
+                    {isLoading ? (
+                        <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
+                            <p className="text-gray-500 font-medium">Loading trip history...</p>
+                        </div>
+                    ) : (
+                        history.length > 0 ? (
                         history.map((trip) => (
-                            <div key={trip.id} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow group">
+                            <button
+                                key={trip.id}
+                                type="button"
+                                onClick={() => navigate('/find-routes', {
+                                    state: {
+                                        from: trip.from,
+                                        to: trip.to,
+                                        autoSearch: true,
+                                    },
+                                })}
+                                className="w-full text-left bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow group"
+                            >
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                     <div className="flex-1 space-y-3">
                                         <div className="flex items-center gap-3">
@@ -44,13 +113,14 @@ const HistoryPage = () => {
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            </button>
                         ))
                     ) : (
                         <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
                             <MapPin className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                             <p className="text-gray-500 font-medium">{t('noTrips')}</p>
                         </div>
+                    )
                     )}
                 </div>
             </div>
