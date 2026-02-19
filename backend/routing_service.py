@@ -39,12 +39,22 @@ class RouteSegment(BaseModel):
     geometry: Dict  # LineString GeoJSON geometry
     stops: List[StopInfo]
 
-class RouteResponse(BaseModel):
-    success: bool
+
+class SingleRoute(BaseModel):
     path_stops: List[StopInfo]
     route_segments: List[RouteSegment]
     total_distance: float
-    total_time: float  # in minutes
+    total_time: float
+
+class RouteResponse(BaseModel):
+    success: bool
+    routes: List[SingleRoute] = []
+    
+    # Deprecated fields for backward compatibility
+    path_stops: Optional[List[StopInfo]] = None
+    route_segments: Optional[List[RouteSegment]] = None
+    total_distance: Optional[float] = None
+    total_time: Optional[float] = None
     error: Optional[str] = None
 
 # ============================================================================
@@ -199,7 +209,7 @@ class TransitGraph:
         print(f"✅ Loaded {len(self.stops)} stops and {len(route_groups)} routes")
         print(f"✅ Built graph with {sum(len(e) for e in self.edges.values())} edges")
     
-    def find_shortest_path(self, source_id: str, dest_id: str) -> Tuple[List[str], float, List[Dict]]:
+    def find_shortest_path(self, source_id: str, dest_id: str, penalized_edges: Dict[Tuple[str, str], float] = None) -> Tuple[List[str], float, List[Dict]]:
         """
         Dijkstra's algorithm to find shortest path
         Returns: (path_stop_ids, total_time, route_info_list)
@@ -211,7 +221,7 @@ class TransitGraph:
         distances = {stop_id: float('inf') for stop_id in self.stops}
         distances[source_id] = 0
         previous = {stop_id: None for stop_id in self.stops}
-        route_info = {stop_id: None for stop_id in self.stops}
+        route_info_map = {stop_id: None for stop_id in self.stops}
         
         # Priority queue: (distance, stop_id)
         pq = [(0, source_id)]
@@ -231,12 +241,21 @@ class TransitGraph:
             
             # Check all neighbors
             for neighbor, weight, edge_info in self.edges[current_stop]:
-                distance = current_dist + weight
+                
+                # Apply penalty if edge is in penalized_edges
+                penalty = 1.0
+                if penalized_edges:
+                    if (current_stop, neighbor) in penalized_edges:
+                        penalty = penalized_edges[(current_stop, neighbor)]
+                    elif (neighbor, current_stop) in penalized_edges:
+                         penalty = penalized_edges[(neighbor, current_stop)]
+
+                distance = current_dist + (weight * penalty)
                 
                 if distance < distances[neighbor]:
                     distances[neighbor] = distance
                     previous[neighbor] = current_stop
-                    route_info[neighbor] = edge_info
+                    route_info_map[neighbor] = edge_info
                     heapq.heappush(pq, (distance, neighbor))
         
         # Reconstruct path
@@ -249,8 +268,8 @@ class TransitGraph:
         
         while current is not None:
             path.append(current)
-            if route_info[current]:
-                route_segments_info.append(route_info[current])
+            if route_info_map[current]:
+                route_segments_info.append(route_info_map[current])
             current = previous[current]
         
         path.reverse()
@@ -341,44 +360,64 @@ def get_all_routes():
 
 @app.post("/find-route", response_model=RouteResponse)
 async def find_route(request: RouteRequest):
-    print("endpoint hit")
-    """
-    Find the shortest route between two stops
-    Returns the path with detailed stop information and route segments
-    """
+    print(f"endpoint hit: {request.source_stop_id} -> {request.destination_stop_id}")
     try:
-        # Find shortest path
-        path_ids, total_time, route_segments_info = transit_graph.find_shortest_path(
-            request.source_stop_id,
-            request.destination_stop_id
-        )
+        found_routes = []
+        penalized_edges = {}
         
-        # Build detailed stop information
-        path_stops = []
-        for stop_id in path_ids:
-            stop = transit_graph.stops[stop_id]
-            path_stops.append(StopInfo(
-                stop_id=stop_id,
-                stop_name=stop['stop_name'],
-                lat=stop['lat'],
-                lng=stop['lng']
-            ))
-        
-        # Build route segments with geometries
-        route_segments = []
-        current_route = None
-        current_stops = []
-        
-        for i, route_info in enumerate(route_segments_info):
-            if route_info:
-                route_name = route_info['route_name']
+        # Try to find up to 3 unique routes
+        for _ in range(3):
+            try:
+                # Find shortest path with current penalties
+                path_ids, total_time, route_segments_info = transit_graph.find_shortest_path(
+                    request.source_stop_id,
+                    request.destination_stop_id,
+                    penalized_edges
+                )
                 
-                # If route changed, save previous segment
-                if current_route and current_route != route_name:
-                    # Find geometry for this segment
+                # Build detailed stop information
+                path_stops = []
+                for stop_id in path_ids:
+                    stop = transit_graph.stops[stop_id]
+                    path_stops.append(StopInfo(
+                        stop_id=stop_id,
+                        stop_name=stop['stop_name'],
+                        lat=stop['lat'],
+                        lng=stop['lng']
+                    ))
+                
+                # Build route segments with geometries
+                route_segments = []
+                current_route = None
+                current_stops = []
+                
+                for i, route_info in enumerate(route_segments_info):
+                    if route_info:
+                        route_name = route_info['route_name']
+                        
+                        # If route changed, save previous segment
+                        if current_route and current_route != route_name:
+                            # Find geometry for this segment
+                            geometry = None
+                            if current_route in transit_graph.routes:
+                                # Use first geometry as representative
+                                geometry = transit_graph.routes[current_route]['geometries'][0]['geometry']
+                            
+                            route_segments.append(RouteSegment(
+                                route_name=current_route,
+                                color=transit_graph.routes[current_route]['color'],
+                                geometry=geometry or {"type": "LineString", "coordinates": []},
+                                stops=current_stops
+                            ))
+                            current_stops = []
+                        
+                        current_route = route_name
+                        current_stops.append(path_stops[i])
+                
+                # Add last segment
+                if current_route and current_stops:
                     geometry = None
                     if current_route in transit_graph.routes:
-                        # Use first geometry as representative
                         geometry = transit_graph.routes[current_route]['geometries'][0]['geometry']
                     
                     route_segments.append(RouteSegment(
@@ -387,44 +426,69 @@ async def find_route(request: RouteRequest):
                         geometry=geometry or {"type": "LineString", "coordinates": []},
                         stops=current_stops
                     ))
-                    current_stops = []
                 
-                current_route = route_name
-                current_stops.append(path_stops[i])
+                # Calculate total distance
+                total_distance = 0
+                for i in range(len(path_stops) - 1):
+                    stop_a = path_stops[i]
+                    stop_b = path_stops[i + 1]
+                    total_distance += transit_graph.haversine_distance(
+                        stop_a.lat, stop_a.lng,
+                        stop_b.lat, stop_b.lng
+                    )
+                
+                new_route = SingleRoute(
+                    path_stops=path_stops,
+                    route_segments=route_segments,
+                    total_distance=round(total_distance, 2),
+                    total_time=round(total_time, 1)
+                )
+
+                # Check if this route is already found (by exact path match)
+                # Simple check: compare stop sequence IDs
+                is_duplicate = False
+                current_path_ids_str = ",".join(path_ids)
+                for existing in found_routes:
+                    existing_path_ids = [s.stop_id for s in existing.path_stops]
+                    if ",".join(existing_path_ids) == current_path_ids_str:
+                        is_duplicate = True
+                        break
+                
+                if not is_duplicate:
+                    found_routes.append(new_route)
+                    
+                    # Penalize edges used in this path for next iteration
+                    # Add 50% penalty to edges
+                    for i in range(len(path_ids) - 1):
+                        u=path_ids[i]
+                        v=path_ids[i+1]
+                        
+                        current_penalty = penalized_edges.get((u, v), 1.0)
+                        penalized_edges[(u, v)] = current_penalty * 2.0
+                        penalized_edges[(v, u)] = current_penalty * 2.0
+                        
+            except ValueError:
+                # No path found (or no MORE paths found)
+                break
         
-        # Add last segment
-        if current_route and current_stops:
-            geometry = None
-            if current_route in transit_graph.routes:
-                geometry = transit_graph.routes[current_route]['geometries'][0]['geometry']
-            
-            route_segments.append(RouteSegment(
-                route_name=current_route,
-                color=transit_graph.routes[current_route]['color'],
-                geometry=geometry or {"type": "LineString", "coordinates": []},
-                stops=current_stops
-            ))
-        
-        # Calculate total distance
-        total_distance = 0
-        for i in range(len(path_stops) - 1):
-            stop_a = path_stops[i]
-            stop_b = path_stops[i + 1]
-            total_distance += transit_graph.haversine_distance(
-                stop_a.lat, stop_a.lng,
-                stop_b.lat, stop_b.lng
-            )
+        if not found_routes:
+             raise HTTPException(status_code=404, detail="No route found")
+
+        # Construct response
+        # Fill legacy fields with the FIRST route
+        primary = found_routes[0]
         
         return RouteResponse(
             success=True,
-            path_stops=path_stops,
-            route_segments=route_segments,
-            total_distance=round(total_distance, 2),
-            total_time=round(total_time, 1)
+            routes=found_routes,
+            path_stops=primary.path_stops,
+            route_segments=primary.route_segments,
+            total_distance=primary.total_distance,
+            total_time=primary.total_time
         )
         
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Routing error: {str(e)}")
 

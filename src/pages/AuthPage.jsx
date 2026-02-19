@@ -1,27 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { User, Lock, Mail, ArrowRight, Loader2 } from 'lucide-react';
 import { useGlobalContext } from '../context/GlobalContext';
 
 const AuthPage = () => {
     const [isLogin, setIsLogin] = useState(true);
-    const { login, register, user } = useAuth();
+    const { login, signup } = useGlobalContext();
     const [isLoading, setIsLoading] = useState(false);
     const [authError, setAuthError] = useState('');
 
-    // Form Stats
+    // Form State
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
-
-    // Check if user is logged in
-    useEffect(() => {
-        if (user) {
-            console.log('👤 User logged in:', user);
-            // You can redirect here or show a success message
-            setAuthError(''); // Clear any errors
-        }
-    }, [user]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -32,13 +23,7 @@ const AuthPage = () => {
             if (isLogin) {
                 await login(email, password);
             } else {
-                await register(name, email, password);
-                // On successful signup, switch to login mode
-                setSuccessMessage('Registration successful! Please login with your credentials.');
-                setIsLogin(true);
-                setName('');
-                setEmail('');
-                setPassword('');
+                await signup(name, email, password);
             }
         } catch (error) {
             console.error("Auth failed", error);
@@ -47,6 +32,7 @@ const AuthPage = () => {
             setIsLoading(false);
         }
     };
+
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">

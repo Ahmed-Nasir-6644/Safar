@@ -83,7 +83,7 @@ export const routesAPI = {
     },
 
     // Find shortest route
-    findRoute: async (startStopName, endStopName) => {
+    findRoute: async (startStopId, endStopId) => {
         // NOTE: The backend expects IDs, but frontend sends names. 
         // We first search for stops to get their IDs.
         // This is a temporary shim. Ideally frontend should pass IDs.
@@ -105,8 +105,8 @@ export const routesAPI = {
             return authenticatedFetch('/find-route', {
                 method: 'POST',
                 body: JSON.stringify({
-                    source_stop_id: startStopName, // Passing name as ID for now, might fail logic but fixes 404
-                    destination_stop_id: endStopName,
+                    source_stop_id: startStopId,
+                    destination_stop_id: endStopId,
                 }),
             }).then(res => ({ data: res }));
         } catch (e) {

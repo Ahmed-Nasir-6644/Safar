@@ -6,12 +6,12 @@ export const useRoutes = () => {
     const [error, setError] = useState(null);
     const [routeData, setRouteData] = useState(null);
 
-    const findRoute = useCallback(async (startStopName, endStopName) => {
+    const findRoute = useCallback(async (startStopId, endStopId) => {
         setLoading(true);
         setError(null);
         try {
-            console.log('🔍 Finding route from', startStopName, 'to', endStopName);
-            const data = await routesAPI.findRoute(startStopName, endStopName);
+            console.log('🔍 Finding route from', startStopId, 'to', endStopId);
+            const data = await routesAPI.findRoute(startStopId, endStopId);
             console.log('✅ Route found:', data);
             setRouteData(data.data);
             return data.data;
@@ -34,11 +34,11 @@ export const useRoutes = () => {
             console.log('✅ data.data:', data.data);
             console.log('✅ data.data type:', typeof data.data);
             console.log('✅ data.data is array?', Array.isArray(data.data));
-            
+
             if (data.data && data.data.length > 0) {
                 console.log('✅ First stop object:', JSON.stringify(data.data[0], null, 2));
             }
-            
+
             // Safely extract stops
             let stopsToReturn = [];
             if (Array.isArray(data.data)) {
@@ -49,7 +49,7 @@ export const useRoutes = () => {
                 console.warn('⚠️ Unexpected data structure:', data.data);
                 stopsToReturn = data.data;
             }
-            
+
             console.log('✅ Returning stops array with length:', stopsToReturn.length);
             return stopsToReturn;
         } catch (err) {

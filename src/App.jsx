@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import MainPage from './pages/MainPage';
 import AuthPage from './pages/AuthPage';
-import FindRoutePage from './pages/FindRoutePage';
+import FindRoutePage from './pages/FindRoutePage'; // Keep existing import for now, will be replaced in route
+import FindRoutesPage from './pages/FindRoutesPage'; // New import as per instruction
 import NetworkMapPage from './pages/NetworkMapPage';
 import HistoryPage from './pages/HistoryPage';
 import HelpPage from './pages/HelpPage';
@@ -43,7 +44,7 @@ function AppLayout() {
           <Route path="/" element={<MainPage />} />
           {/* Since we are gated, /login should just redirect to home if accessed while logged in */}
           <Route path="/login" element={<Navigate to="/" />} />
-          <Route path="/find-routes" element={<FindRoutePage />} />
+          <Route path="/find-routes" element={<FindRoutesPage />} /> {/* Changed from FindRoutePage to FindRoutesPage */}
           <Route path="/network-map" element={<NetworkMapPage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/help" element={<HelpPage />} />

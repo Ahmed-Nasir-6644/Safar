@@ -206,6 +206,26 @@ const NetworkMapPage = () => {
             });
     }, [location.search]);
 
+    // Handle route navigation from FindRoutesPage
+    useEffect(() => {
+        if (location.state?.routeToDisplay) {
+            const route = location.state.routeToDisplay;
+            setRoutingData(route);
+            setRoutingMode(true);
+            setIsDarkMode(true); // Switch to dark mode like normal routing
+
+            // Zoom to start point if available
+            if (route.path_stops && route.path_stops.length > 0) {
+                const startPoint = route.path_stops[0];
+                setTargetLocation({ lat: startPoint.lat, lng: startPoint.lng });
+                setCurrentZoom(13);
+            }
+
+            // Clear the state so it doesn't persist on refresh/navigation
+            window.history.replaceState({}, document.title);
+        }
+    }, [location.state]);
+
     // Search functionality
     useEffect(() => {
         if (searchQuery.trim() === '') {
@@ -406,18 +426,16 @@ const NetworkMapPage = () => {
             const coords = feature.geometry.coordinates;
 
             const popupContent = `
-                <div class="font-sans min-w-[160px] p-1">
-                    <div class="font-bold text-gray-900 mb-3 text-base border-b pb-2">${stopName}</div>
+                <div style="font-family:'Poppins',sans-serif; min-width:200px; padding:4px">
+                    <div style="font-weight:700; color:#111827; margin-bottom:10px; font-size:14px; border-bottom:1px solid #e5e7eb; padding-bottom:8px; line-height:1.4">${stopName}</div>
                     ${!routingMode ? `
                         <button 
                             onclick="window.startRoutingFromStop('${stopName}', ${coords[1]}, ${coords[0]})"
-                            class="flex items-center gap-2 px-4 py-2.5 bg-accent-orange text-white rounded-xl hover:bg-orange-600 transition-colors w-full justify-center font-bold text-sm shadow-sm"
+                            style="display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:10px 16px; background:#f97316; color:white; border:none; border-radius:10px; font-weight:700; font-size:13px; cursor:pointer; font-family:'Poppins',sans-serif;"
+                            onmouseover="this.style.background='#ea6c08'"
+                            onmouseout="this.style.background='#f97316'"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <polyline points="12 16 16 12 12 8"></polyline>
-                                <line x1="8" y1="12" x2="16" y2="12"></line>
-                            </svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 16 16 12 12 8"></polyline><line x1="8" y1="12" x2="16" y2="12"></line></svg>
                             Start Routing Here
                         </button>
                     ` : ''}
@@ -425,7 +443,9 @@ const NetworkMapPage = () => {
             `;
 
             layer.bindPopup(popupContent, {
-                className: 'custom-popup'
+                className: 'custom-popup',
+                maxWidth: 280,
+                minWidth: 200
             });
         }
     };
@@ -538,47 +558,47 @@ const NetworkMapPage = () => {
                 {/* ========== STATIC ROUTING INFO PANEL ========== */}
                 {routingMode && routingData && (
                     <div className="mb-6 w-full max-w-[1600px] mx-auto">
-                        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
 
-                            {/* Row 1: Header (Route Found + Stats) */}
-                            <div className="flex items-center gap-4 mb-4">
-                                <div className="p-3 bg-orange-100 rounded-xl">
-                                    <RouteIcon className="w-6 h-6 text-accent-orange" />
+                            {/* Row 1: Header */}
+                            <div className="flex items-start gap-3 mb-4">
+                                <div className="p-2.5 bg-orange-100 rounded-xl shrink-0">
+                                    <RouteIcon className="w-5 h-5 text-accent-orange" />
                                 </div>
-                                <div>
-                                    <h3 className="text-xl font-bold text-gray-900">Route Found!</h3>
-                                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                                <div className="min-w-0">
+                                    <h3 className="text-lg font-bold text-gray-900">Route Found!</h3>
+                                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500 mt-0.5">
                                         <span>{routingData.total_distance} km</span>
-                                        <span>•</span>
+                                        <span className="text-gray-300">•</span>
                                         <span>{routingData.total_time} min</span>
-                                        <span>•</span>
+                                        <span className="text-gray-300">•</span>
                                         <span>{routingData.path_stops.length} stops</span>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Row 2: Gray Box + Clear Button */}
-                            <div className="flex flex-col md:flex-row gap-4">
-                                {/* Route Visualizer (Gray Box) */}
-                                <div className="flex-grow flex flex-col md:flex-row gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100 items-center">
-                                    <div className="flex items-center gap-2">
-                                        <MapPin className="w-5 h-5 text-green-600" />
-                                        <span className="font-medium text-gray-700">{routingData.path_stops[0].stop_name}</span>
+                            {/* Row 2: Route visualizer + Clear button */}
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                {/* Route Visualizer */}
+                                <div className="flex-grow flex flex-col sm:flex-row gap-3 bg-gray-50 px-4 py-3 rounded-xl border border-gray-100 items-start sm:items-center min-w-0">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <MapPin className="w-4 h-4 text-green-600 shrink-0" />
+                                        <span className="font-medium text-gray-700 text-sm truncate">{routingData.path_stops[0].stop_name}</span>
                                     </div>
-                                    <div className="hidden md:block flex-grow border-t-2 border-dashed border-gray-300 self-center mx-4"></div>
-                                    <div className="md:hidden h-4 border-l-2 border-dashed border-gray-300 ml-2"></div>
-                                    <div className="flex items-center gap-2">
-                                        <Navigation className="w-5 h-5 text-red-600" />
-                                        <span className="font-medium text-gray-700">{routingData.path_stops[routingData.path_stops.length - 1].stop_name}</span>
+                                    <div className="hidden sm:block flex-grow border-t-2 border-dashed border-gray-300 self-center mx-2"></div>
+                                    <div className="sm:hidden border-l-2 border-dashed border-gray-300 h-4 ml-2"></div>
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <Navigation className="w-4 h-4 text-red-600 shrink-0" />
+                                        <span className="font-medium text-gray-700 text-sm truncate">{routingData.path_stops[routingData.path_stops.length - 1].stop_name}</span>
                                     </div>
                                 </div>
 
-                                {/* Clear Button */}
+                                {/* Clear button */}
                                 <button
                                     onClick={handleClearRouting}
-                                    className="w-full md:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-red-50 text-red-600 border border-red-100 rounded-xl hover:bg-red-100 transition-colors font-bold whitespace-nowrap"
+                                    className="flex items-center justify-center gap-2 px-5 py-3 bg-red-50 text-red-600 border border-red-100 rounded-xl hover:bg-red-100 transition-colors font-bold text-sm whitespace-nowrap shrink-0"
                                 >
-                                    <XCircle className="w-5 h-5" />
+                                    <XCircle className="w-4 h-4" />
                                     Clear Route
                                 </button>
                             </div>
@@ -699,10 +719,10 @@ const NetworkMapPage = () => {
                     </div>
                 )}
 
-                <div className="flex flex-col lg:flex-row gap-6 h-[75vh] w-full max-w-[1600px] mx-auto px-4 mb-12">
+                <div className="flex flex-col-reverse lg:flex-row gap-6 lg:h-[75vh] w-full max-w-[1600px] mx-auto px-4 mb-12">
 
                     {/* Sidebar Control Panel */}
-                    <div className="lg:w-80 flex-shrink-0 flex flex-col gap-4 h-full overflow-hidden">
+                    <div className="lg:w-80 flex-shrink-0 flex flex-col gap-4 lg:h-full overflow-hidden">
                         {routingMode && routingData ? (
                             /* Route Instructions Panel */
                             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col h-full">
@@ -770,7 +790,7 @@ const NetworkMapPage = () => {
                                     </button>
                                 </div>
 
-                                <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                                <div className="space-y-3 max-h-[200px] lg:max-h-[400px] overflow-y-auto">
                                     {routesList.map((routeName) => {
                                         const route = routes[routeName];
                                         return (
@@ -840,7 +860,7 @@ const NetworkMapPage = () => {
                     </div>
 
                     {/* Map Container */}
-                    <div ref={mapContainerRef} className={`flex-grow bg-gray-100 rounded-3xl shadow-sm border border-gray-200 overflow-hidden relative ${currentZoom < ZOOM_THRESHOLD ? 'hide-labels' : ''}`}>
+                    <div ref={mapContainerRef} className={`flex-grow bg-gray-100 rounded-3xl shadow-sm border border-gray-200 overflow-hidden relative h-[55vh] lg:h-full ${currentZoom < ZOOM_THRESHOLD ? 'hide-labels' : ''}`}>
                         <MapContainer
                             center={[33.6844, 73.0479]}
                             zoom={12}
