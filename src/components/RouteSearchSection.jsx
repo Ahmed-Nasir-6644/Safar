@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapPin, ArrowRightLeft, Search, Loader2, ChevronDown, ChevronUp, Bus, Clock, TrendingUp } from 'lucide-react';
+import { MapPin, ArrowRightLeft, Search, Loader2, ChevronDown, ChevronUp, Bus, Clock, TrendingUp, Volume2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useGlobalContext } from '../context/GlobalContext';
 import useRoutes from '../hooks/useRoutes';
@@ -22,6 +22,10 @@ const RouteSearchSection = () => {
     const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
     const [stopsLoading, setStopsLoading] = useState(true);
     const [expandedSegments, setExpandedSegments] = useState({});
+    const [dictatingRoutes, setDictatingRoutes] = useState({});
+    const [speakingRoutes, setSpeakingRoutes] = useState({});
+    const [dictationErrors, setDictationErrors] = useState({});
+    const intentionalStopRef = useRef({});
     const fromInputRef = useRef(null);
     const toInputRef = useRef(null);
     const navigate = useNavigate();
@@ -182,6 +186,15 @@ const RouteSearchSection = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    // Cleanup speech synthesis on unmount
+    useEffect(() => {
+        return () => {
+            if (window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+            }
+        };
+    }, []);
+
     const handleFromSelect = (stop) => {
         setFromStopName(stop.stop_name);
         setFromQuery(stop.stop_name);
@@ -223,6 +236,159 @@ const RouteSearchSection = () => {
         } finally {
             setSearching(false);
         }
+    };
+
+    const handleDictateRoute = async (route, routeIndex) => {
+        // Prevent duplicate requests
+        if (dictatingRoutes[routeIndex]) {
+            return;
+        }
+
+        // Clear any previous error for this route
+        setDictationErrors(prev => {
+            const newErrors = { ...prev };
+            delete newErrors[routeIndex];
+            return newErrors;
+        });
+
+        // Set loading state for this specific route
+        setDictatingRoutes(prev => ({ ...prev, [routeIndex]: true }));
+
+        try {
+            // Cancel any ongoing speech
+            if (window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+            }
+
+            // Prepare the route data as a string
+            const routeDataString = JSON.stringify(route, null, 2);
+
+            // Send POST request to backend
+            const response = await fetch('http://localhost:8000/dictate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    ocr_result: routeDataString
+                })
+            });
+
+            let data = await response.json();
+            
+            if (data.success && data.prediction) {
+                // Use browser Text-to-Speech
+                if ('speechSynthesis' in window) {
+                    let summaryText = "";
+
+                    try {
+                    // If prediction is already an object, skip parsing
+                    const parsed =
+                        typeof data.prediction === "string"
+                        ? JSON.parse(data.prediction)
+                        : data.prediction;
+
+                    summaryText = parsed?.summary || "";
+                    } catch (error) {
+                    console.error("Failed to parse prediction JSON:", error);
+                    summaryText = "";
+                    }
+                    const utterance = new SpeechSynthesisUtterance(summaryText);
+                    utterance.lang = 'en-US';
+                    utterance.rate = 0.9;
+                    utterance.pitch = 1;
+                    
+                    // Event listeners
+                    utterance.onstart = () => {
+                        console.log('Speech started');
+                        setSpeakingRoutes(prev => ({ ...prev, [routeIndex]: true }));
+                    };
+
+                    utterance.onend = () => {
+                        console.log('Speech finished');
+                        setSpeakingRoutes(prev => {
+                            const newState = { ...prev };
+                            delete newState[routeIndex];
+                            return newState;
+                        });
+                        // Clear the intentional stop flag if it exists
+                        if (intentionalStopRef.current[routeIndex]) {
+                            delete intentionalStopRef.current[routeIndex];
+                        }
+                    };
+                    
+                    utterance.onerror = (event) => {
+                        console.error('Speech error:', event);
+                        
+                        // Only show error if it wasn't an intentional stop
+                        if (!intentionalStopRef.current[routeIndex]) {
+                            setDictationErrors(prev => ({
+                                ...prev,
+                                [routeIndex]: 'Speech synthesis failed'
+                            }));
+                        }
+                        
+                        setSpeakingRoutes(prev => {
+                            const newState = { ...prev };
+                            delete newState[routeIndex];
+                            return newState;
+                        });
+                        
+                        // Clear the intentional stop flag
+                        if (intentionalStopRef.current[routeIndex]) {
+                            delete intentionalStopRef.current[routeIndex];
+                        }
+                    };
+
+                    window.speechSynthesis.speak(utterance);
+                } else {
+                    setDictationErrors(prev => ({
+                        ...prev,
+                        [routeIndex]: 'Text-to-speech not supported in your browser'
+                    }));
+                }
+            } else {
+                // Handle error from backend
+                setDictationErrors(prev => ({
+                    ...prev,
+                    [routeIndex]: data.error || 'Failed to generate speech text'
+                }));
+            }
+        } catch (error) {
+            console.error('Error dictating route:', error);
+            setDictationErrors(prev => ({
+                ...prev,
+                [routeIndex]: 'Network error: Could not connect to dictation service'
+            }));
+        } finally {
+            // Clear loading state
+            setDictatingRoutes(prev => {
+                const newState = { ...prev };
+                delete newState[routeIndex];
+                return newState;
+            });
+        }
+    };
+
+    const handleStopSpeech = (routeIndex) => {
+        // Mark this as an intentional stop
+        intentionalStopRef.current[routeIndex] = true;
+        
+        if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+        }
+        setSpeakingRoutes(prev => {
+            const newState = { ...prev };
+            delete newState[routeIndex];
+            return newState;
+        });
+        
+        // Clear the intentional stop flag after a short delay
+        setTimeout(() => {
+            if (intentionalStopRef.current[routeIndex]) {
+                delete intentionalStopRef.current[routeIndex];
+            }
+        }, 100);
     };
 
     const routes = routeData?.routes && Array.isArray(routeData.routes)
@@ -472,11 +638,45 @@ const RouteSearchSection = () => {
                                                         </span>
                                                     )}
                                                 </div>
-                                                <ChevronDown
-                                                    className={`w-6 h-6 transition-transform ${
-                                                        isSelected ? 'rotate-180 text-accent-orange' : 'text-gray-400'
-                                                    }`}
-                                                />
+                                                <div className="flex items-center gap-2">
+                                                    {/* Voice/Speaker Icon Button */}
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (speakingRoutes[routeIndex]) {
+                                                                handleStopSpeech(routeIndex);
+                                                            } else {
+                                                                handleDictateRoute(route, routeIndex);
+                                                            }
+                                                        }}
+                                                        disabled={dictatingRoutes[routeIndex]}
+                                                        className={`p-2 rounded-full transition-all ${
+                                                            dictatingRoutes[routeIndex]
+                                                                ? 'bg-orange-100 text-accent-orange cursor-not-allowed'
+                                                                : speakingRoutes[routeIndex]
+                                                                ? 'bg-red-50 text-red-600 hover:bg-red-100 hover:scale-110'
+                                                                : 'bg-blue-50 text-blue-600 hover:bg-blue-100 hover:scale-110'
+                                                        }`}
+                                                        title={
+                                                            speakingRoutes[routeIndex]
+                                                                ? 'Stop speaking'
+                                                                : 'Listen to route instructions'
+                                                        }
+                                                    >
+                                                        {dictatingRoutes[routeIndex] ? (
+                                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                                        ) : speakingRoutes[routeIndex] ? (
+                                                            <X className="w-5 h-5" />
+                                                        ) : (
+                                                            <Volume2 className="w-5 h-5" />
+                                                        )}
+                                                    </button>
+                                                    <ChevronDown
+                                                        className={`w-6 h-6 transition-transform ${
+                                                            isSelected ? 'rotate-180 text-accent-orange' : 'text-gray-400'
+                                                        }`}
+                                                    />
+                                                </div>
                                             </div>
 
                                             {/* Key Stats */}
@@ -518,6 +718,16 @@ const RouteSearchSection = () => {
                                                 </div>
                                             )}
                                         </button>
+
+                                        {/* Dictation Error Message */}
+                                        {dictationErrors[routeIndex] && (
+                                            <div className="px-6 pb-4">
+                                                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-start gap-2">
+                                                    <span className="text-red-500 font-bold">⚠️</span>
+                                                    <span>{dictationErrors[routeIndex]}</span>
+                                                </div>
+                                            </div>
+                                        )}
 
                                         {/* Expandable Route Details */}
                                         {isSelected && (
