@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapPin, ArrowRightLeft, Search, Loader2, ChevronDown } from 'lucide-react';
+import { MapPin, ArrowRightLeft, Search, Loader2, ChevronDown, ChevronUp, Bus, Clock, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useGlobalContext } from '../context/GlobalContext';
 import useRoutes from '../hooks/useRoutes';
@@ -21,6 +21,7 @@ const RouteSearchSection = () => {
     const [searching, setSearching] = useState(false);
     const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
     const [stopsLoading, setStopsLoading] = useState(true);
+    const [expandedSegments, setExpandedSegments] = useState({});
     const fromInputRef = useRef(null);
     const toInputRef = useRef(null);
     const navigate = useNavigate();
@@ -236,14 +237,34 @@ const RouteSearchSection = () => {
         if (!Number.isFinite(distance)) {
             return 'N/A';
         }
-        return `${distance.toFixed(1)}km`;
+        return `${distance.toFixed(1)} km`;
     };
 
-    const formatTime = (distance) => {
-        if (!Number.isFinite(distance)) {
+    const formatTime = (minutes) => {
+        if (!Number.isFinite(minutes)) {
             return 'N/A';
         }
-        return `~${Math.ceil(distance / 2)} min`;
+        return `${Math.ceil(minutes)} min`;
+    };
+
+    const toggleSegment = (routeIndex, segmentIndex) => {
+        const key = `${routeIndex}-${segmentIndex}`;
+        setExpandedSegments(prev => ({
+            ...prev,
+            [key]: !prev[key]
+        }));
+    };
+
+    const getRouteColor = (routeName) => {
+        const colors = {
+            'RED': 'bg-red-100 text-red-800 border-red-200',
+            'BLUE': 'bg-blue-100 text-blue-800 border-blue-200',
+            'GREEN': 'bg-green-100 text-green-800 border-green-200',
+            'YELLOW': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+            'ORANGE': 'bg-orange-100 text-orange-800 border-orange-200',
+            'PURPLE': 'bg-purple-100 text-purple-800 border-purple-200',
+        };
+        return colors[routeName?.toUpperCase()] || 'bg-gray-100 text-gray-800 border-gray-200';
     };
 
     const displayFromStops = fromQuery.length > 0 ? filteredFromStops : allStops;
@@ -410,129 +431,278 @@ const RouteSearchSection = () => {
                 )}
 
                 {routes.length > 0 && (
-                    <div className="mt-8 p-6 bg-green-50 border border-green-200 rounded-lg">
-                        <h3 className="text-lg font-semibold text-green-900 mb-4">
-                            ✅ Routes Found!
+                    <div className="mt-8 space-y-6">
+                        <h3 className="text-2xl font-bold text-gray-900 mb-4">
+                            ✅ {routes.length} {routes.length === 1 ? 'Route' : 'Routes'} Found
                         </h3>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                            {routes.map((route, index) => (
-                                <button
-                                    key={`${route.startStop?.stop_id || 'start'}-${route.endStop?.stop_id || 'end'}-${index}`}
-                                    onClick={() => setSelectedRouteIndex(index)}
-                                    className={`text-left p-4 rounded-xl border transition-all ${
-                                        selectedRouteIndex === index
-                                            ? 'border-accent-orange bg-white shadow-md'
-                                            : 'border-green-200 bg-green-50 hover:bg-white'
-                                    }`}
-                                >
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="text-sm font-semibold text-gray-800">
-                                            Route Option {index + 1}
-                                        </span>
-                                        <ChevronDown
-                                            className={`w-4 h-4 transition-transform ${
-                                                selectedRouteIndex === index ? 'rotate-180 text-accent-orange' : 'text-gray-400'
-                                            }`}
-                                        />
-                                    </div>
-                                    <div className="text-sm text-gray-600 space-y-1">
-                                        <div className="flex items-center justify-between">
-                                            <span>Stops</span>
-                                            <span className="font-semibold text-gray-900">{route.numberOfStops}</span>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <span>Distance</span>
-                                            <span className="font-semibold text-gray-900">{formatDistance(route.totalDistance)}</span>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <span>ETA</span>
-                                            <span className="font-semibold text-gray-900">{formatTime(route.totalDistance)}</span>
-                                        </div>
-                                        {route.transferCount !== undefined && (
-                                            <div className="flex items-center justify-between">
-                                                <span>Transfers</span>
-                                                <span className="font-semibold text-gray-900">{route.transferCount}</span>
-                                            </div>
-                                        )}
-                                        {route.busesUsed && route.busesUsed.length > 0 && (
-                                            <div className="flex items-center justify-between">
-                                                <span>Buses</span>
-                                                <span className="font-semibold text-gray-900">{route.busesUsed.join(', ')}</span>
-                                            </div>
-                                        )}
-                                        {route.fare?.amount && (
-                                            <div className="flex items-center justify-between pt-2 mt-2 border-t border-gray-200">
-                                                <span className="font-medium">Fare</span>
-                                                <span className="font-bold text-accent-orange">
-                                                    Rs. {route.fare.amount}
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-
-                        {selectedRoute && (
-                            <div className="bg-white rounded-lg p-4">
-                                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                                    <p className="text-sm font-semibold text-gray-700">Selected Route Details</p>
-                                    {routeData?.fare?.amount && (
-                                        <span className="text-xs font-semibold text-accent-orange bg-orange-50 px-3 py-1 rounded-full">
-                                            Fare: {routeData.fare.amount} {routeData.fare.currency || ''}
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center mb-4">
-                                    <div>
-                                        <p className="text-2xl font-bold text-green-600">{selectedRoute.numberOfStops}</p>
-                                        <p className="text-sm text-green-700">Total Stops</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-2xl font-bold text-green-600">{formatDistance(selectedRoute.totalDistance)}</p>
-                                        <p className="text-sm text-green-700">Distance</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-2xl font-bold text-green-600">{formatTime(selectedRoute.totalDistance)}</p>
-                                        <p className="text-sm text-green-700">Est. Time</p>
-                                    </div>
-                                    {selectedRoute.transferCount !== undefined && (
-                                        <div>
-                                            <p className="text-2xl font-bold text-blue-600">{selectedRoute.transferCount}</p>
-                                            <p className="text-sm text-blue-700">Transfers</p>
-                                        </div>
-                                    )}
-                                </div>
-                                {selectedRoute.busesUsed && selectedRoute.busesUsed.length > 0 && (
-                                    <div className="bg-blue-50 rounded-lg p-4 mb-4">
-                                        <p className="text-sm font-semibold text-gray-700 mb-2">🚌 Buses Used:</p>
-                                        <div className="flex flex-wrap gap-2">
-                                            {selectedRoute.busesUsed.map((bus, idx) => (
-                                                <span key={`${bus}-${idx}`} className="px-3 py-1 bg-blue-200 rounded-full text-sm font-semibold text-blue-800">
-                                                    {bus}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                                <div className="bg-green-50 rounded-lg p-4">
-                                    <p className="text-sm font-semibold text-gray-700 mb-2">Route Path:</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {selectedRoute.routeStops?.map((stop, index) => (
-                                            <React.Fragment key={stop.stop_id}>
-                                                <div className="px-3 py-1 bg-orange-100 rounded-full text-xs font-medium text-accent-orange">
-                                                    {stop.stop_name}
+                        {/* Route Cards */}
+                        <div className="grid grid-cols-1 gap-6">
+                            {routes.map((route, routeIndex) => {
+                                const isSelected = selectedRouteIndex === routeIndex;
+                                const estimatedMinutes = route.estimatedMinutes || Math.ceil(route.totalDistance * 2);
+                                const isDirect = route.transferCount === 0;
+                                
+                                return (
+                                    <div
+                                        key={`route-${routeIndex}`}
+                                        className={`border-2 rounded-2xl overflow-hidden transition-all ${
+                                            isSelected 
+                                                ? 'border-accent-orange bg-white shadow-xl' 
+                                                : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        {/* Route Header - Clickable */}
+                                        <button
+                                            onClick={() => setSelectedRouteIndex(routeIndex)}
+                                            className="w-full text-left p-6 hover:bg-gray-50 transition-colors"
+                                        >
+                                            <div className="flex items-start justify-between mb-4">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xl font-bold text-gray-900">
+                                                        Route Option {routeIndex + 1}
+                                                    </span>
+                                                    {isDirect ? (
+                                                        <span className="px-3 py-1 bg-green-100 text-green-700 text-sm font-semibold rounded-full border border-green-300">
+                                                            Direct Route
+                                                        </span>
+                                                    ) : (
+                                                        <span className="px-3 py-1 bg-yellow-100 text-yellow-700 text-sm font-semibold rounded-full border border-yellow-300">
+                                                            {route.transferCount} {route.transferCount === 1 ? 'Transfer' : 'Transfers'}
+                                                        </span>
+                                                    )}
                                                 </div>
-                                                {index < selectedRoute.routeStops.length - 1 && (
-                                                    <div className="self-center text-gray-400">→</div>
-                                                )}
-                                            </React.Fragment>
-                                        ))}
+                                                <ChevronDown
+                                                    className={`w-6 h-6 transition-transform ${
+                                                        isSelected ? 'rotate-180 text-accent-orange' : 'text-gray-400'
+                                                    }`}
+                                                />
+                                            </div>
+
+                                            {/* Key Stats */}
+                                            <div className="grid grid-cols-3 gap-4 mb-4">
+                                                <div className="text-center p-3 bg-white rounded-xl border border-gray-200">
+                                                    <Clock className="w-5 h-5 mx-auto mb-1 text-accent-orange" />
+                                                    <p className="text-2xl font-bold text-gray-900">{formatTime(estimatedMinutes)}</p>
+                                                    <p className="text-xs text-gray-600 mt-1">Duration</p>
+                                                </div>
+                                                <div className="text-center p-3 bg-white rounded-xl border border-gray-200">
+                                                    <TrendingUp className="w-5 h-5 mx-auto mb-1 text-accent-orange" />
+                                                    <p className="text-2xl font-bold text-gray-900">{formatDistance(route.totalDistance)}</p>
+                                                    <p className="text-xs text-gray-600 mt-1">Distance</p>
+                                                </div>
+                                                <div className="text-center p-3 bg-white rounded-xl border border-gray-200">
+                                                    <span className="text-2xl mb-1 block">💰</span>
+                                                    <p className="text-2xl font-bold text-accent-orange">
+                                                        {route.fare?.amount || 'N/A'}
+                                                    </p>
+                                                    <p className="text-xs text-gray-600 mt-1">{route.fare?.currency || 'PKR'}</p>
+                                                </div>
+                                            </div>
+
+                                            {/* Bus Lines Used */}
+                                            {route.busSequence && route.busSequence.length > 0 && (
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <Bus className="w-4 h-4 text-gray-600" />
+                                                    <span className="text-sm font-medium text-gray-600">Bus Lines:</span>
+                                                    {route.busSequence.map((bus, idx) => (
+                                                        <React.Fragment key={`bus-${routeIndex}-${idx}`}>
+                                                            <span className={`px-3 py-1 rounded-full text-sm font-bold border-2 ${getRouteColor(bus)}`}>
+                                                                {bus}
+                                                            </span>
+                                                            {idx < route.busSequence.length - 1 && (
+                                                                <span className="text-gray-400 font-bold">→</span>
+                                                            )}
+                                                        </React.Fragment>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </button>
+
+                                        {/* Expandable Route Details */}
+                                        {isSelected && (
+                                            <div className="border-t-2 border-gray-200 bg-white">
+                                                <div className="p-6 space-y-6">
+                                                    {/* Journey Instructions Header */}
+                                                    <div className="mb-4">
+                                                        <h4 className="text-lg font-bold text-gray-900 mb-2">
+                                                            Step-by-Step Journey
+                                                        </h4>
+                                                        <p className="text-sm text-gray-600">
+                                                            Follow these instructions to complete your journey
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Route Segments */}
+                                                    {route.routeSegments && route.routeSegments.length > 0 ? (
+                                                        <div className="space-y-4">
+                                                            {route.routeSegments.map((segment, segmentIndex) => {
+                                                                const segmentKey = `${routeIndex}-${segmentIndex}`;
+                                                                const isExpanded = expandedSegments[segmentKey];
+                                                                
+                                                                return (
+                                                                    <div key={segmentKey} className="space-y-3">
+                                                                        {/* Segment Card */}
+                                                                        <div className={`border-2 rounded-xl overflow-hidden ${getRouteColor(segment.routeName)} border-opacity-50`}>
+                                                                            {/* Segment Header */}
+                                                                            <div className={`p-4 ${getRouteColor(segment.routeName)} bg-opacity-30`}>
+                                                                                <div className="flex items-center justify-between mb-2">
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <Bus className="w-5 h-5" />
+                                                                                        <span className="text-lg font-bold">
+                                                                                            {segment.routeName} Line
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <span className="text-sm font-medium opacity-75">
+                                                                                        ({segment.stopCount} stops, {formatDistance(segment.distance)})
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+
+                                                                            {/* Boarding Info */}
+                                                                            <div className="p-4 bg-green-50 border-b-2 border-green-200">
+                                                                                <div className="flex items-start gap-3">
+                                                                                    <div className="mt-1">
+                                                                                        <MapPin className="w-5 h-5 text-green-600" />
+                                                                                    </div>
+                                                                                    <div>
+                                                                                        <p className="text-sm font-semibold text-green-700 mb-1">
+                                                                                            📍 Board at:
+                                                                                        </p>
+                                                                                        <p className="text-xl font-bold text-green-900">
+                                                                                            {segment.boardingStop}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+
+                                                                            {/* Collapsible Stops List */}
+                                                                            <div className="p-4 bg-white">
+                                                                                <button
+                                                                                    onClick={() => toggleSegment(routeIndex, segmentIndex)}
+                                                                                    className="w-full flex items-center justify-between py-2 px-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                                                                                >
+                                                                                    <span className="text-sm font-semibold text-gray-700">
+                                                                                        {isExpanded ? 'Hide' : 'Show'} all {segment.stopCount} stops
+                                                                                    </span>
+                                                                                    {isExpanded ? (
+                                                                                        <ChevronUp className="w-4 h-4 text-gray-600" />
+                                                                                    ) : (
+                                                                                        <ChevronDown className="w-4 h-4 text-gray-600" />
+                                                                                    )}
+                                                                                </button>
+
+                                                                                {/* Expanded Stops */}
+                                                                                {isExpanded && segment.stops && (
+                                                                                    <div className="mt-3 space-y-2 pl-4 border-l-2 border-gray-300">
+                                                                                        {segment.stops.map((stop, stopIndex) => (
+                                                                                            <div key={stop.stop_id} className="flex items-center gap-3 py-1">
+                                                                                                {stopIndex === 0 ? (
+                                                                                                    <span className="w-3 h-3 rounded-full bg-green-500 flex-shrink-0" title="Starting point"></span>
+                                                                                                ) : stopIndex === segment.stops.length - 1 ? (
+                                                                                                    <span className="w-3 h-3 rounded-full bg-red-500 flex-shrink-0" title="End of segment"></span>
+                                                                                                ) : (
+                                                                                                    <span className="w-3 h-3 rounded-full border-2 border-gray-400 bg-white flex-shrink-0"></span>
+                                                                                                )}
+                                                                                                <span className="text-sm text-gray-700">
+                                                                                                    {stop.stop_name}
+                                                                                                    {stopIndex === 0 && (
+                                                                                                        <span className="ml-2 text-xs text-green-600 font-semibold">(Start)</span>
+                                                                                                    )}
+                                                                                                    {stopIndex === segment.stops.length - 1 && (
+                                                                                                        <span className="ml-2 text-xs text-red-600 font-semibold">(End)</span>
+                                                                                                    )}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+
+                                                                            {/* Alighting Info */}
+                                                                            <div className="p-4 bg-red-50 border-t-2 border-red-200">
+                                                                                <div className="flex items-start gap-3">
+                                                                                    <div className="mt-1">
+                                                                                        <MapPin className="w-5 h-5 text-red-600" />
+                                                                                    </div>
+                                                                                    <div>
+                                                                                        <p className="text-sm font-semibold text-red-700 mb-1">
+                                                                                            🛑 Get off at:
+                                                                                        </p>
+                                                                                        <p className="text-xl font-bold text-red-900">
+                                                                                            {segment.alightingStop}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {/* Transfer Indicator */}
+                                                                        {segmentIndex < route.routeSegments.length - 1 && (
+                                                                            <div className="flex items-center justify-center py-3">
+                                                                                <div className="px-6 py-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-full shadow-lg border-2 border-orange-600 flex items-center gap-2">
+                                                                                    <span className="text-lg font-bold">→</span>
+                                                                                    <span className="font-bold">
+                                                                                        Transfer to {route.routeSegments[segmentIndex + 1].routeName} Line
+                                                                                    </span>
+                                                                                    <span className="text-lg font-bold">→</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    ) : (
+                                                        /* Fallback: Old format without segments */
+                                                        <div className="bg-gray-50 rounded-lg p-4">
+                                                            <p className="text-sm font-semibold text-gray-700 mb-3">Route Path:</p>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {route.routeStops?.map((stop, index) => (
+                                                                    <React.Fragment key={stop.stop_id}>
+                                                                        <div className="px-3 py-1 bg-orange-100 rounded-full text-xs font-medium text-accent-orange border border-orange-200">
+                                                                            {stop.stop_name}
+                                                                        </div>
+                                                                        {index < route.routeStops.length - 1 && (
+                                                                            <div className="self-center text-gray-400 font-bold">→</div>
+                                                                        )}
+                                                                    </React.Fragment>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Fare Breakdown */}
+                                                    {route.fare?.fareDetails && route.fare.fareDetails.length > 0 && (
+                                                        <div className="bg-orange-50 rounded-lg p-4 border-2 border-orange-200">
+                                                            <h5 className="text-sm font-bold text-gray-900 mb-3">💰 Fare Breakdown</h5>
+                                                            <div className="space-y-2">
+                                                                {route.fare.fareDetails.map((fareItem, idx) => (
+                                                                    <div key={idx} className="flex items-center justify-between text-sm">
+                                                                        <span className={`px-2 py-1 rounded font-semibold ${getRouteColor(fareItem.route)}`}>
+                                                                            {fareItem.route}
+                                                                        </span>
+                                                                        <span className="font-bold text-gray-900">
+                                                                            {fareItem.fare} {route.fare.currency}
+                                                                        </span>
+                                                                    </div>
+                                                                ))}
+                                                                <div className="pt-2 mt-2 border-t-2 border-orange-300 flex items-center justify-between">
+                                                                    <span className="font-bold text-gray-900">Total Fare:</span>
+                                                                    <span className="text-xl font-bold text-accent-orange">
+                                                                        {route.fare.amount} {route.fare.currency}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                </div>
-                            </div>
-                        )}
+                                );
+                            })}
+                        </div>
                     </div>
                 )}
             </div>
