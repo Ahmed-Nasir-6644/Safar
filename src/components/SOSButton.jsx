@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AlertCircle, Phone, Mail, X, Send } from 'lucide-react';
 
-const SOSButton = () => {
+const SOSButton = ({ children }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [messageSent, setMessageSent] = useState(false);
 
@@ -16,14 +16,18 @@ const SOSButton = () => {
 
     return (
         <>
-            {/* Floating Button */}
-            <button
-                onClick={() => setIsOpen(true)}
-                className="fixed bottom-6 right-6 z-50 bg-red-600 text-white p-4 rounded-full shadow-lg hover:bg-red-700 hover:scale-110 transition-all duration-300 animate-pulse"
-                aria-label="SOS Emergency"
-            >
-                <span className="font-bold text-lg">SOS</span>
-            </button>
+            {/* Trigger */}
+            {children ? (
+                <div onClick={() => setIsOpen(true)}>{children}</div>
+            ) : (
+                <button
+                    onClick={() => setIsOpen(true)}
+                    className="fixed bottom-6 right-6 z-50 bg-red-600 text-white p-4 rounded-full shadow-lg hover:bg-red-700 hover:scale-110 transition-all duration-300 animate-pulse"
+                    aria-label="SOS Emergency"
+                >
+                    <span className="font-bold text-lg">SOS</span>
+                </button>
+            )}
 
             {/* Modal */}
             {isOpen && (

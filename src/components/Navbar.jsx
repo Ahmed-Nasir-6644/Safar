@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Home, Route, Map, Menu, X, User, Settings, LogOut, LogIn, UserPlus, Users, History, HelpCircle } from 'lucide-react';
+import { Home, Route, Map, Menu, X, User, Settings, LogOut, LogIn, UserPlus, Users, History, HelpCircle, AlertCircle } from 'lucide-react';
 import { useGlobalContext } from '../context/GlobalContext';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import SOSButton from './SOSButton';
 
 const Navbar = () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -95,6 +96,13 @@ const Navbar = () => {
                                         <History className="w-4 h-4" />
                                         <span>{t('myHistory')}</span>
                                     </Link>
+                                    <SOSButton>
+                                        <button className="w-full text-left px-5 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3 transition-colors">
+                                            <AlertCircle className="w-4 h-4" />
+                                            <span>Emergency SOS</span>
+                                        </button>
+                                    </SOSButton>
+
                                 </div>
                                 <div className="border-t border-gray-100 mt-2 pt-2">
                                     <button

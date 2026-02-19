@@ -37,7 +37,6 @@ function AppLayout() {
   return (
     <div className="font-poppins flex flex-col min-h-screen">
       <Navbar />
-      <SOSButton />
       <ChatWidget />
       <main className="flex-grow">
         <Routes>

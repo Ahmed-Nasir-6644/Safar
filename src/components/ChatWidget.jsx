@@ -4,9 +4,9 @@ import { MessageCircle, Send, X, Bot, User, Loader2 } from 'lucide-react';
 const ChatWidget = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState([
-        { 
-            role: 'bot', 
-            content: 'Hello! I am the MetroMate assistant. How can I help you today?' 
+        {
+            role: 'bot',
+            content: 'Hello! I am the MetroMate assistant. How can I help you today?'
         }
     ]);
     const [input, setInput] = useState('');
@@ -26,17 +26,17 @@ const ChatWidget = () => {
     // Handle form submission
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (!input.trim() || isLoading) return;
 
         const userMessage = input.trim();
-        
+
         // Add user message to chat
         setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
-        
+
         // Clear input immediately
         setInput('');
-        
+
         // Set loading state
         setIsLoading(true);
 
@@ -55,26 +55,26 @@ const ChatWidget = () => {
 
             if (data.success && data.prediction) {
                 // Add bot response to chat
-                setMessages(prev => [...prev, { 
-                    role: 'bot', 
-                    content: data.prediction 
+                setMessages(prev => [...prev, {
+                    role: 'bot',
+                    content: data.prediction
                 }]);
             } else {
                 // Handle error from backend
-                const errorMessage = data.error 
+                const errorMessage = data.error
                     ? `Sorry, I am having trouble connecting right now. ${data.error}`
                     : 'Sorry, I couldn\'t process your request. Please try again.';
-                
-                setMessages(prev => [...prev, { 
-                    role: 'bot', 
-                    content: errorMessage 
+
+                setMessages(prev => [...prev, {
+                    role: 'bot',
+                    content: errorMessage
                 }]);
             }
         } catch (error) {
             console.error('Chat error:', error);
-            setMessages(prev => [...prev, { 
-                role: 'bot', 
-                content: 'Sorry, I am having trouble connecting right now. Please check your connection and try again.' 
+            setMessages(prev => [...prev, {
+                role: 'bot',
+                content: 'Sorry, I am having trouble connecting right now. Please check your connection and try again.'
             }]);
         } finally {
             setIsLoading(false);
@@ -95,7 +95,7 @@ const ChatWidget = () => {
             {!isOpen && (
                 <button
                     onClick={() => setIsOpen(true)}
-                    className="fixed bottom-6 right-6 w-16 h-16 bg-accent-orange text-white rounded-full shadow-2xl hover:bg-orange-600 transition-all duration-300 flex items-center justify-center z-50 hover:scale-110 group"
+                    className="fixed bottom-6 right-6 w-16 h-16 bg-accent-orange text-white rounded-full shadow-2xl hover:bg-orange-600 transition-all duration-300 flex items-center justify-center z-[9999] hover:scale-110 group"
                     aria-label="Open chat"
                 >
                     <MessageCircle className="w-7 h-7 group-hover:scale-110 transition-transform" />
@@ -105,7 +105,7 @@ const ChatWidget = () => {
 
             {/* Chat Window */}
             {isOpen && (
-                <div className="fixed bottom-6 right-6 w-96 h-[600px] bg-white rounded-2xl shadow-2xl flex flex-col z-50 border border-gray-200 animate-in slide-in-from-bottom-4 fade-in duration-300">
+                <div className="fixed bottom-6 right-6 w-96 h-[600px] bg-white rounded-2xl shadow-2xl flex flex-col z-[9999] border border-gray-200 animate-in slide-in-from-bottom-4 fade-in duration-300">
                     {/* Header */}
                     <div className="bg-gradient-to-r from-accent-orange to-orange-600 text-white p-4 rounded-t-2xl flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -127,7 +127,7 @@ const ChatWidget = () => {
                     </div>
 
                     {/* Messages Area */}
-                    <div 
+                    <div
                         ref={chatContainerRef}
                         className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50"
                         style={{ scrollBehavior: 'smooth' }}
@@ -139,11 +139,10 @@ const ChatWidget = () => {
                             >
                                 <div className={`flex gap-2 max-w-[80%] ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                                     {/* Avatar */}
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                        message.role === 'user' 
-                                            ? 'bg-blue-500 text-white' 
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${message.role === 'user'
+                                            ? 'bg-blue-500 text-white'
                                             : 'bg-gray-300 text-gray-700'
-                                    }`}>
+                                        }`}>
                                         {message.role === 'user' ? (
                                             <User className="w-5 h-5" />
                                         ) : (
@@ -152,11 +151,10 @@ const ChatWidget = () => {
                                     </div>
 
                                     {/* Message Bubble */}
-                                    <div className={`rounded-2xl px-4 py-3 shadow-sm ${
-                                        message.role === 'user'
+                                    <div className={`rounded-2xl px-4 py-3 shadow-sm ${message.role === 'user'
                                             ? 'bg-accent-orange text-white rounded-tr-none'
                                             : 'bg-white text-gray-800 rounded-tl-none border border-gray-200'
-                                    }`}>
+                                        }`}>
                                         <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                                             {message.content}
                                         </p>

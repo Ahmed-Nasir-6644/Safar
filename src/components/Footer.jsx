@@ -3,7 +3,7 @@ import { useGlobalContext } from '../context/GlobalContext';
 const Footer = () => {
     const { t } = useGlobalContext();
     return (
-        <footer className="bg-white border-t border-gray-200 py-12 my-container">
+        <footer className="bg-white border-t border-gray-200 py-12 my-container relative z-10">
             <div className="flex flex-col md:flex-row justify-between items-center md:items-start gap-8">
                 <div className="text-center md:text-left">
                     <div className="flex items-center justify-center md:justify-start space-x-2 mb-2">
