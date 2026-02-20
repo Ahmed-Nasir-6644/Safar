@@ -1,8 +1,9 @@
 /**
  * API Utility - Centralized API calls for MetroMate
+ * Aligned with reference backend contract (Safar-Backend)
  */
 
-const API_URL = 'http://localhost:8000';
+const API_URL = 'http://localhost:5000';
 
 // Helper function to get auth token
 const getAuthToken = () => {
@@ -74,88 +75,76 @@ export const gtfsAPI = {
 };
 
 // ==================== Route Finder Routes ====================
+// Aligned with reference backend contract (routeFinderRoutes.js / routeFinderController.js)
 
 export const routesAPI = {
-    // Initialize route graph (Not supported by currrent backend)
+    // Initialize route graph
     initGraph: async () => {
-        // Return mock success as backend is stateless/auto-init
-        return { data: { success: true } };
+        return authenticatedFetch('/routes/init', { method: 'POST' });
     },
 
-    // Find shortest route
-    findRoute: async (startStopId, endStopId) => {
-        // NOTE: The backend expects IDs, but frontend sends names. 
-        // We first search for stops to get their IDs.
-        // This is a temporary shim. Ideally frontend should pass IDs.
+    // Initialize graph and get all stops (combined endpoint)
+    initAndGetAllStops: async () => {
+        return authenticatedFetch('/routes/init-and-get-stops');
+    },
 
-        try {
-            // we need to look up these stops first
-            // But we can't easily do it here without fetching all stops.
-            // For now, we'll try to use the names as IDs if they look like IDs, 
-            // OR we rely on the backend to handle names (it doesn't).
-            // Let's assume the frontend will be updated to pass IDs or we need a lookup.
+    // Find shortest route by stop names
+    findRoute: async (startStopName, endStopName, maxRoutes = 6) => {
+        return authenticatedFetch('/routes/find/by-name', {
+            method: 'POST',
+            body: JSON.stringify({
+                startStopName,
+                endStopName,
+                maxRoutes,
+            }),
+        });
+    },
 
-            // ACTUALLY: The frontend 'search' uses names. 
-            // The backend 'find_shortest_path' uses IDs.
-            // The stops from /stops include stop_id and stop_name.
-
-            // We will point to the correct endpoint. If it fails due to ID/Name mismatch,
-            // that is a separate logical error. The current task is NetworkError (connectivity/404).
-
-            return authenticatedFetch('/find-route', {
-                method: 'POST',
-                body: JSON.stringify({
-                    source_stop_id: startStopId,
-                    destination_stop_id: endStopId,
-                }),
-            }).then(res => ({ data: res }));
-        } catch (e) {
-            throw e;
-        }
+    // Find route by stop IDs
+    findRouteById: async (startStopId, endStopId) => {
+        return authenticatedFetch('/routes/find', {
+            method: 'POST',
+            body: JSON.stringify({
+                startStopId,
+                endStopId,
+            }),
+        });
     },
 
     // Find single stop by name
     getStopByName: async (stopName) => {
-        // Not implemented in backend
-        return { data: null };
+        return authenticatedFetch(`/routes/stop/by-name?stopName=${encodeURIComponent(stopName)}`);
     },
 
     // Find nearby stops
     findNearbyStops: async (stopId, radiusKm = 2) => {
-        // Not implemented in backend
-        return { data: [] };
+        return authenticatedFetch('/routes/nearby', {
+            method: 'POST',
+            body: JSON.stringify({
+                stopId,
+                radiusKm,
+            }),
+        });
     },
 
     // Get all stops
     getAllStops: async () => {
-        // Backend returns { "stops": [...], "count": ... }
-        // Frontend expects { data: ... } or { data: { stops: ... } }
-        return authenticatedFetch('/stops').then(data => ({ data: data.stops }));
+        return authenticatedFetch('/routes/stops');
     },
 
     // Search stops by name
     searchStops: async (query) => {
-        // Backend doesn't have search, we fetch all and filter client side?
-        // Or we use the single get_all_stops.
-        // For now, let's just return all stops and let frontend filter if possible,
-        // or return empty if backend doesn't support search.
-        // Wait, gtfsAPI has search. routesAPI uses it?
-        return authenticatedFetch('/stops').then(data => {
-            const stops = data.stops.filter(s =>
-                s.stop_name.toLowerCase().includes(query.toLowerCase())
-            );
-            return { data: stops };
-        });
+        return authenticatedFetch(`/routes/search?query=${encodeURIComponent(query)}`);
     },
 
     // Get graph statistics
     getStats: async () => {
-        return authenticatedFetch('/health').then(data => ({ data: { status: data.status } }));
+        return authenticatedFetch('/routes/stats');
     },
 
     // Rebuild graph
     rebuildGraph: async () => {
-        return { data: { success: true } };
+        return authenticatedFetch('/routes/rebuild', { method: 'POST' });
     },
 };
 

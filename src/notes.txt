@@ -203,3 +203,30 @@ example route data:
     }
   ]
 }
+
+
+if alightingStop
+: 
+"Unknown"
+boardingStop
+: 
+"Unknown"
+distance
+: 
+1.39
+routeId
+: 
+"fr_8c"
+routeName
+: 
+"FR_8C"
+stopCount
+: 
+0
+stops
+: 
+[]
+or if same aligning and boarding then discard this transfer
+if end stop is goal then we discard the next segments
+
+- add up or down after stopname if its id contains up or down

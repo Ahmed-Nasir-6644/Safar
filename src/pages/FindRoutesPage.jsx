@@ -3,8 +3,7 @@ import ReactDOM from 'react-dom';
 import { MapPin, ArrowRightLeft, Search, Loader2, Map, Mic, Clock, Navigation, AlertCircle, CheckCircle2, ArrowUpDown, Star, Repeat2, Bus, Train, Ruler, ArrowRight, X, Banknote, ChevronRight, ListOrdered } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useGlobalContext } from '../context/GlobalContext';
-
-const API_URL = 'http://localhost:8000';
+import { routesAPI } from '../utils/api';
 
 const FindRoutesPage = () => {
     const [allStops, setAllStops] = useState([]);
@@ -30,12 +29,24 @@ const FindRoutesPage = () => {
     const navigate = useNavigate();
     const { t } = useGlobalContext();
 
-    // Load all stops on mount
+    // Load all stops on mount using the aligned API
     useEffect(() => {
-        fetch(`${API_URL}/stops`)
-            .then(r => r.json())
-            .then(data => setAllStops(data.stops || []))
-            .catch(err => console.error('Failed to load stops:', err));
+        const loadStops = async () => {
+            try {
+                const response = await routesAPI.getAllStops();
+                // Response: { success, message, data: [...stops] }
+                if (response.success && Array.isArray(response.data)) {
+                    setAllStops(response.data);
+                } else {
+                    console.error('Unexpected stops response:', response);
+                    setAllStops([]);
+                }
+            } catch (err) {
+                console.error('Failed to load stops:', err);
+                setAllStops([]);
+            }
+        };
+        loadStops();
     }, []);
 
     // Filter from stops
@@ -59,22 +70,19 @@ const FindRoutesPage = () => {
         setHasSearched(true);
         setRoutes([]);
         try {
-            const res = await fetch(`${API_URL}/find-route`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    source_stop_id: fromStop.stop_id,
-                    destination_stop_id: toStop.stop_id,
-                }),
-            });
-            if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
-                throw new Error(errData.detail || `Error ${res.status}`);
+            // Use the aligned API - find by name
+            const response = await routesAPI.findRoute(fromStop.stop_name, toStop.stop_name, 6);
+            
+            // Response: { success, message, data: { routes: [...], farePolicy: {...} } }
+            if (!response.success) {
+                throw new Error(response.message || 'Failed to find route');
             }
-            const data = await res.json();
-            const routeList = data.routes && data.routes.length > 0
-                ? data.routes
-                : (data.path_stops ? [data] : []);
+            
+            const routeData = response.data;
+            const routeList = routeData.routes && routeData.routes.length > 0
+                ? routeData.routes
+                : [];
+            
             setRoutes(routeList);
             setSortBy('recommended');
             setSelectedRouteIndex(null);
@@ -168,11 +176,11 @@ const FindRoutesPage = () => {
         return { bg: 'bg-gray-400', light: 'bg-gray-50 text-gray-700 border-gray-200' };
     };
 
-    // Sort routes
+    // Sort routes - updated to use new field names from reference backend
     const sortedRoutes = [...routes].sort((a, b) => {
-        if (sortBy === 'time') return (a.total_time || 0) - (b.total_time || 0);
-        if (sortBy === 'stops') return ((a.path_stops || []).length) - ((b.path_stops || []).length);
-        if (sortBy === 'transfers') return ((a.route_segments || []).length) - ((b.route_segments || []).length);
+        if (sortBy === 'time') return (a.estimatedMinutes || 0) - (b.estimatedMinutes || 0);
+        if (sortBy === 'stops') return ((a.routeStops || a.path_stops || []).length) - ((b.routeStops || b.path_stops || []).length);
+        if (sortBy === 'transfers') return ((a.routeSegments || a.route_segments || []).length) - ((b.routeSegments || b.route_segments || []).length);
         return 0;
     });
 
@@ -183,12 +191,16 @@ const FindRoutesPage = () => {
         { key: 'transfers', label: 'Fewest Transfers', Icon: Repeat2 },
     ];
 
-    // ---- Detail Modal ----
+    // ---- Detail Modal - Updated for reference backend field names ----
     const DetailModal = ({ route, onClose }) => {
         if (!route) return null;
-        const segments = route.route_segments || [];
-        const stops = route.path_stops || [];
-        const fare = route.fare_pkr || estimateFare(route.total_distance);
+        // Support both old and new field names for compatibility
+        const segments = route.routeSegments || route.route_segments || [];
+        const stops = route.routeStops || route.path_stops || [];
+        const totalTime = route.estimatedMinutes || route.total_time;
+        const totalDist = route.totalDistance || route.total_distance;
+        // Fare from backend or estimate
+        const fare = route.fare?.amount || route.fare_pkr || estimateFare(totalDist);
 
         return ReactDOM.createPortal(
             <div
@@ -221,8 +233,8 @@ const FindRoutesPage = () => {
                     {/* Stats — 2-column grid (always, scales up naturally on wider screens) */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', borderBottom: '1px solid #f3f4f6', flexShrink: 0 }}>
                         {[
-                            { Icon: Clock, label: 'Duration', value: formatTime(route.total_time), color: '#f97316' },
-                            { Icon: Ruler, label: 'Distance', value: formatDistance(route.total_distance), color: '#3b82f6' },
+                            { Icon: Clock, label: 'Duration', value: formatTime(totalTime), color: '#f97316' },
+                            { Icon: Ruler, label: 'Distance', value: formatDistance(totalDist), color: '#3b82f6' },
                             { Icon: Bus, label: 'Stops', value: stops.length, color: '#6b7280' },
                             { Icon: Banknote, label: 'Est. Fare', value: fare ? `Rs. ${fare}` : 'N/A', color: '#10b981' },
                         ].map(({ Icon, label, value, color }, idx) => (
@@ -244,7 +256,9 @@ const FindRoutesPage = () => {
                     {/* Scrollable body — segments + stop list */}
                     <div style={{ overflowY: 'auto', flex: 1, padding: '16px' }}>
                         {segments.length > 0 ? segments.map((seg, si) => {
-                            const TransIcon = getTransportIcon(seg.route_name);
+                            // Support both old and new field names
+                            const routeName = seg.routeName || seg.route_name;
+                            const TransIcon = getTransportIcon(routeName);
                             const segStops = seg.stops || [];
                             return (
                                 <div key={si} style={{ marginBottom: si < segments.length - 1 ? 20 : 0 }}>
@@ -254,7 +268,7 @@ const FindRoutesPage = () => {
                                             <TransIcon size={15} color="#374151" />
                                         </div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{seg.route_name || 'Route'}</p>
+                                            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{routeName || 'Route'}</p>
                                             <p style={{ margin: 0, fontSize: 11, color: '#9ca3af' }}>{segStops.length} stops on this segment</p>
                                         </div>
                                         {si < segments.length - 1 && (
@@ -499,12 +513,17 @@ const FindRoutesPage = () => {
                             {sortedRoutes.map((route, index) => {
                                 const originalIndex = routes.indexOf(route);
                                 const { label, colorClass } = getRouteLabel(originalIndex);
-                                const segments = route.route_segments || [];
-                                const stops = route.path_stops || [];
+                                // Support both old and new field names for compatibility
+                                const segments = route.routeSegments || route.route_segments || [];
+                                const stops = route.routeStops || route.path_stops || [];
+                                const totalTime = route.estimatedMinutes || route.total_time;
+                                const totalDist = route.totalDistance || route.total_distance;
                                 const isSelected = selectedRouteIndex === index;
                                 const isDirect = segments.length <= 1;
-                                const fare = route.fare_pkr || estimateFare(route.total_distance);
-                                const accent = segments.length > 0 ? getSegmentAccent(segments[0].route_name) : { bg: 'bg-gray-300', light: 'bg-gray-50 text-gray-600 border-gray-200' };
+                                // Fare from backend or estimate
+                                const fare = route.fare?.amount || route.fare_pkr || estimateFare(totalDist);
+                                const firstSegmentName = segments.length > 0 ? (segments[0].routeName || segments[0].route_name) : null;
+                                const accent = firstSegmentName ? getSegmentAccent(firstSegmentName) : { bg: 'bg-gray-300', light: 'bg-gray-50 text-gray-600 border-gray-200' };
 
                                 return (
                                     <div
@@ -552,11 +571,11 @@ const FindRoutesPage = () => {
                                                 </div>
                                             </div>
 
-                                            {/* Stats row */}
+                                            {/* Stats row - updated to use new field names */}
                                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                                                 {[
-                                                    { Icon: Clock, label: 'Duration', value: formatTime(route.total_time), iconBg: 'bg-orange-50', iconColor: 'text-accent-orange' },
-                                                    { Icon: Ruler, label: 'Distance', value: formatDistance(route.total_distance), iconBg: 'bg-blue-50', iconColor: 'text-blue-500' },
+                                                    { Icon: Clock, label: 'Duration', value: formatTime(totalTime), iconBg: 'bg-orange-50', iconColor: 'text-accent-orange' },
+                                                    { Icon: Ruler, label: 'Distance', value: formatDistance(totalDist), iconBg: 'bg-blue-50', iconColor: 'text-blue-500' },
                                                     { Icon: Bus, label: 'Stops', value: stops.length, iconBg: 'bg-gray-100', iconColor: 'text-gray-500' },
                                                     { Icon: Banknote, label: 'Est. Fare', value: fare ? `Rs. ${fare}` : 'N/A', iconBg: 'bg-green-50', iconColor: 'text-green-600' },
                                                 ].map(({ Icon, label, value, iconBg, iconColor }) => (
@@ -572,7 +591,7 @@ const FindRoutesPage = () => {
                                                 ))}
                                             </div>
 
-                                            {/* Journey flow strip */}
+                                            {/* Journey flow strip - updated to use new field names */}
                                             <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-100 flex items-center flex-wrap gap-2">
                                                 <div className="flex items-center gap-1.5 min-w-0">
                                                     <div className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" />
@@ -581,14 +600,15 @@ const FindRoutesPage = () => {
                                                     </span>
                                                 </div>
                                                 {segments.length > 0 ? segments.map((seg, i) => {
-                                                    const TransIcon = getTransportIcon(seg.route_name);
-                                                    const segAccent = getSegmentAccent(seg.route_name);
+                                                    const segRouteName = seg.routeName || seg.route_name;
+                                                    const TransIcon = getTransportIcon(segRouteName);
+                                                    const segAccent = getSegmentAccent(segRouteName);
                                                     return (
                                                         <React.Fragment key={i}>
                                                             <ArrowRight className="w-3 h-3 text-gray-400 shrink-0" />
                                                             <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold ${segAccent.light}`}>
                                                                 <TransIcon className="w-3.5 h-3.5 shrink-0" />
-                                                                <span>{seg.route_name || 'Route'}</span>
+                                                                <span>{segRouteName || 'Route'}</span>
                                                                 {seg.stops?.length > 0 && <span className="opacity-60 font-normal">· {seg.stops.length} stops</span>}
                                                             </div>
                                                             {i < segments.length - 1 && (
