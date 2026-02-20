@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Home, Route, Map, Menu, X, User, Settings, LogOut, LogIn, UserPlus, Users, History, HelpCircle, AlertCircle } from 'lucide-react';
+import { Home, Route, Map, Menu, X, User, Settings, LogOut, LogIn, UserPlus, Users, History, HelpCircle, AlertCircle, Heart } from 'lucide-react';
 import { useGlobalContext } from '../context/GlobalContext';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import SOSButton from './SOSButton';
@@ -10,6 +10,7 @@ const Navbar = () => {
     const { user, logout, language, toggleLanguage, t } = useGlobalContext();
     const location = useLocation();
     const navigate = useNavigate();
+    const displayName = user?.name || user?.username || user?.email?.split('@')[0] || 'User';
 
     const navItems = [
         { name: t('home'), icon: <Home className="w-5 h-5" />, path: "/" },
@@ -80,7 +81,7 @@ const Navbar = () => {
                             className="flex items-center space-x-3 focus:outline-none"
                         >
                             <div className="w-10 h-10 rounded-full bg-accent-orange text-white flex items-center justify-center font-bold text-lg shadow-md hover:scale-105 transition-transform border-4 border-white">
-                                {user.name.charAt(0)}
+                                {displayName.charAt(0).toUpperCase()}
                             </div>
                         </button>
 
@@ -88,7 +89,7 @@ const Navbar = () => {
                         {isProfileOpen && (
                             <div className="absolute right-0 top-14 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden py-2 animate-in fade-in slide-in-from-top-4 duration-200">
                                 <div className="px-5 py-3 border-b border-gray-100">
-                                    <p className="font-semibold text-gray-900">{user.name}</p>
+                                    <p className="font-semibold text-gray-900">{displayName}</p>
                                     <p className="text-xs text-secondary-gray">{user.email}</p>
                                 </div>
                                 <div className="py-2">
@@ -103,6 +104,10 @@ const Navbar = () => {
                                         </button>
                                     </SOSButton>
 
+                                    <Link to="/favorites" className="flex items-center space-x-3 px-5 py-2.5 text-sm text-secondary-gray hover:bg-orange-50 hover:text-accent-orange transition-colors">
+                                        <Heart className="w-4 h-4" />
+                                        <span>{t('myFavorites')}</span>
+                                    </Link>
                                 </div>
                                 <div className="border-t border-gray-100 mt-2 pt-2">
                                     <button
@@ -167,16 +172,19 @@ const Navbar = () => {
                             <div className="flex flex-col space-y-4 items-center bg-gray-50 p-6 rounded-2xl border border-gray-100">
                                 <div className="flex items-center space-x-3 mb-2">
                                     <div className="w-12 h-12 rounded-full bg-accent-orange text-white flex items-center justify-center font-bold text-xl border-4 border-white shadow-sm">
-                                        {user.name.charAt(0)}
+                                        {displayName.charAt(0).toUpperCase()}
                                     </div>
                                     <div className="text-center">
-                                        <p className="font-bold text-gray-900 text-lg leading-tight">{user.name}</p>
+                                        <p className="font-bold text-gray-900 text-lg leading-tight">{displayName}</p>
                                         <p className="text-sm text-gray-500">{user.email}</p>
                                     </div>
                                 </div>
                                 <div className="flex w-full gap-3">
                                     <Link to="/history" onClick={() => setIsOpen(false)} className="flex-1 py-3 bg-white text-gray-700 font-semibold rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm text-center">
-                                        History
+                                        {t('myHistory')}
+                                    </Link>
+                                    <Link to="/favorites" onClick={() => setIsOpen(false)} className="flex-1 py-3 bg-white text-gray-700 font-semibold rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm text-center">
+                                        {t('myFavorites')}
                                     </Link>
                                     <button
                                         onClick={() => {

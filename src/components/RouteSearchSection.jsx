@@ -2,6 +2,8 @@ import React from 'react';
 import { Search, Bus, Clock, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useGlobalContext } from '../context/GlobalContext';
+import useRoutes from '../hooks/useRoutes';
+import { routesAPI } from '../utils/api';
 
 const RouteSearchSection = () => {
     const navigate = useNavigate();

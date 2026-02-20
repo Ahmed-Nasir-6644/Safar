@@ -6,6 +6,7 @@ import FindRoutePage from './pages/FindRoutePage'; // Keep existing import for n
 import FindRoutesPage from './pages/FindRoutesPage'; // New import as per instruction
 import NetworkMapPage from './pages/NetworkMapPage';
 import HistoryPage from './pages/HistoryPage';
+import FavoriteRoutesPage from './pages/FavoriteRoutesPage';
 import HelpPage from './pages/HelpPage';
 import Loader from './components/Loader';
 import Navbar from './components/Navbar';
@@ -47,6 +48,7 @@ function AppLayout() {
           <Route path="/find-routes" element={<FindRoutesPage />} /> {/* Changed from FindRoutePage to FindRoutesPage */}
           <Route path="/network-map" element={<NetworkMapPage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/favorites" element={<FavoriteRoutesPage />} />
           <Route path="/help" element={<HelpPage />} />
         </Routes>
       </main>
