@@ -273,9 +273,15 @@ const NetworkMapPage = () => {
             return;
         }
 
-        const filtered = stopsList.filter(stop =>
-            stop.name.toLowerCase().includes(searchQuery.toLowerCase())
-        );
+        const q = searchQuery.toLowerCase();
+        const seen = new Set();
+        const filtered = stopsList.filter(stop => {
+            const nameLower = stop.name.toLowerCase();
+            if (!nameLower.includes(q)) return false;
+            if (seen.has(nameLower)) return false;
+            seen.add(nameLower);
+            return true;
+        });
         setFilteredStops(filtered);
     }, [searchQuery, stopsList]);
 

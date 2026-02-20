@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { MapPin, ArrowRightLeft, Search, Loader2, Map, Mic, Clock, Navigation, AlertCircle, CheckCircle2, ArrowUpDown, Star, Repeat2, Bus, Train, Ruler, ArrowRight, X, Banknote, ChevronRight, ListOrdered } from 'lucide-react';
+import { MapPin, ArrowRightLeft, Search, Loader2, Map, Mic, Clock, Navigation, AlertCircle, CheckCircle2, ArrowUpDown, Star, Repeat2, Bus, Train, Ruler, ArrowRight, X, Banknote, ChevronRight, ListOrdered, Volume2, Heart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useGlobalContext } from '../context/GlobalContext';
 import { routesAPI } from '../utils/api';
@@ -25,6 +25,18 @@ const FindRoutesPage = () => {
     const [sortBy, setSortBy] = useState('recommended');
     const [selectedRouteIndex, setSelectedRouteIndex] = useState(null);
     const [modalRoute, setModalRoute] = useState(null); // route object for detail modal
+
+    // ---- Speaker / dictation state ----
+    const [dictatingRoutes, setDictatingRoutes] = useState({});
+    const [speakingRoutes, setSpeakingRoutes] = useState({});
+    const [dictationErrors, setDictationErrors] = useState({});
+    const intentionalStopRef = useRef({});
+
+    // ---- Favourite state ----
+    const [favoriteRoutes, setFavoriteRoutes] = useState({});
+    const [savingFavoriteRoutes, setSavingFavoriteRoutes] = useState({});
+    const [favoriteMessage, setFavoriteMessage] = useState('');
+    const [favoriteError, setFavoriteError] = useState('');
 
     const navigate = useNavigate();
     const { t } = useGlobalContext();
@@ -133,7 +145,114 @@ const FindRoutesPage = () => {
     const handleShowOnMap = (route) => {
         navigate('/network-map', { state: { routeToDisplay: route } });
     };
-    // --- Helpers ---
+
+    // ---- Favourite helpers ----
+    const getRouteFavoriteKey = (route) => {
+        const sequence = Array.isArray(route?.busSequence) ? route.busSequence.join('-') : 'no-bus';
+        const from = route?.routeSegments?.[0]?.boardingStop || route?.routeStops?.[0]?.stop_name || 'unknown-from';
+        const to = route?.routeSegments?.[route?.routeSegments?.length - 1]?.alightingStop
+            || route?.routeStops?.[route?.routeStops?.length - 1]?.stop_name || 'unknown-to';
+        const distance = Number.isFinite(route?.totalDistance) ? route.totalDistance.toFixed(2) : 'na';
+        return `${from}::${to}::${sequence}::${distance}`;
+    };
+
+    const toggleFavoriteRoute = async (route) => {
+        const key = getRouteFavoriteKey(route);
+        const isAlreadyFavorite = !!favoriteRoutes[key];
+        if (isAlreadyFavorite) {
+            setFavoriteRoutes(prev => ({ ...prev, [key]: false }));
+            setFavoriteError('');
+            setFavoriteMessage('Route removed from favourites.');
+            return;
+        }
+        const fallbackFrom = route?.routeSegments?.[0]?.boardingStop
+            || route?.routeStops?.[0]?.stop_name || fromQuery;
+        const fallbackTo = route?.routeSegments?.[route?.routeSegments?.length - 1]?.alightingStop
+            || route?.routeStops?.[route?.routeStops?.length - 1]?.stop_name || toQuery;
+        try {
+            setSavingFavoriteRoutes(prev => ({ ...prev, [key]: true }));
+            setFavoriteMessage('');
+            setFavoriteError('');
+            await routesAPI.saveFavoriteRoute({
+                startingPoint: fallbackFrom,
+                destination: fallbackTo,
+                tripName: `${fallbackFrom} to ${fallbackTo}`,
+                routeData: route,
+            });
+            setFavoriteRoutes(prev => ({ ...prev, [key]: true }));
+            setFavoriteMessage('Route added to favourites successfully.');
+        } catch (err) {
+            setFavoriteError(err.message || 'Failed to save favourite route.');
+        } finally {
+            setSavingFavoriteRoutes(prev => {
+                const next = { ...prev };
+                delete next[key];
+                return next;
+            });
+        }
+    };
+
+    // ---- Speaker / dictation helpers ----
+    const handleDictateRoute = async (route, routeIndex) => {
+        if (dictatingRoutes[routeIndex]) return;
+        setDictationErrors(prev => { const n = { ...prev }; delete n[routeIndex]; return n; });
+        setDictatingRoutes(prev => ({ ...prev, [routeIndex]: true }));
+        try {
+            if (window.speechSynthesis) window.speechSynthesis.cancel();
+            const response = await fetch('http://localhost:8000/dictate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ocr_result: JSON.stringify(route, null, 2) }),
+            });
+            const data = await response.json();
+            if (data.success && data.prediction) {
+                if ('speechSynthesis' in window) {
+                    let summaryText = '';
+                    try {
+                        const parsed = typeof data.prediction === 'string'
+                            ? JSON.parse(data.prediction)
+                            : data.prediction;
+                        summaryText = parsed?.summary || '';
+                    } catch {
+                        summaryText = '';
+                    }
+                    const utterance = new SpeechSynthesisUtterance(summaryText);
+                    utterance.lang = 'en-US';
+                    utterance.rate = 0.9;
+                    utterance.pitch = 1;
+                    utterance.onstart = () => setSpeakingRoutes(prev => ({ ...prev, [routeIndex]: true }));
+                    utterance.onend = () => {
+                        setSpeakingRoutes(prev => { const n = { ...prev }; delete n[routeIndex]; return n; });
+                        if (intentionalStopRef.current[routeIndex]) delete intentionalStopRef.current[routeIndex];
+                    };
+                    utterance.onerror = (event) => {
+                        if (!intentionalStopRef.current[routeIndex]) {
+                            setDictationErrors(prev => ({ ...prev, [routeIndex]: 'Speech synthesis failed' }));
+                        }
+                        setSpeakingRoutes(prev => { const n = { ...prev }; delete n[routeIndex]; return n; });
+                        if (intentionalStopRef.current[routeIndex]) delete intentionalStopRef.current[routeIndex];
+                    };
+                    window.speechSynthesis.speak(utterance);
+                } else {
+                    setDictationErrors(prev => ({ ...prev, [routeIndex]: 'Text-to-speech not supported in your browser' }));
+                }
+            } else {
+                setDictationErrors(prev => ({ ...prev, [routeIndex]: data.error || 'Failed to generate speech text' }));
+            }
+        } catch (error) {
+            console.error('Error dictating route:', error);
+            setDictationErrors(prev => ({ ...prev, [routeIndex]: 'Network error: Could not connect to dictation service' }));
+        } finally {
+            setDictatingRoutes(prev => { const n = { ...prev }; delete n[routeIndex]; return n; });
+        }
+    };
+
+    const handleStopSpeech = (routeIndex) => {
+        intentionalStopRef.current[routeIndex] = true;
+        if (window.speechSynthesis) window.speechSynthesis.cancel();
+        setSpeakingRoutes(prev => { const n = { ...prev }; delete n[routeIndex]; return n; });
+        setTimeout(() => { if (intentionalStopRef.current[routeIndex]) delete intentionalStopRef.current[routeIndex]; }, 100);
+    };
     const formatTime = (mins) => {
         if (!mins && mins !== 0) return 'N/A';
         const h = Math.floor(mins / 60);
@@ -525,6 +644,11 @@ const FindRoutesPage = () => {
                                 const firstSegmentName = segments.length > 0 ? (segments[0].routeName || segments[0].route_name) : null;
                                 const accent = firstSegmentName ? getSegmentAccent(firstSegmentName) : { bg: 'bg-gray-300', light: 'bg-gray-50 text-gray-600 border-gray-200' };
 
+                                // Favourite + speaker state for this card
+                                const favoriteKey = getRouteFavoriteKey(route);
+                                const isFavorite = !!favoriteRoutes[favoriteKey];
+                                const isSavingFavorite = !!savingFavoriteRoutes[favoriteKey];
+
                                 return (
                                     <div
                                         key={index}
@@ -552,6 +676,56 @@ const FindRoutesPage = () => {
                                                     )}
                                                 </div>
                                                 <div className="flex items-center gap-2 shrink-0">
+                                                    {/* Favourite button */}
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            toggleFavoriteRoute(route);
+                                                        }}
+                                                        disabled={isSavingFavorite}
+                                                        className={`p-2 rounded-full transition-all ${
+                                                            isFavorite
+                                                                ? 'bg-pink-50 text-pink-600 hover:bg-pink-100 hover:scale-110'
+                                                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:scale-110'
+                                                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                                        title={isFavorite ? 'Remove from favourites' : 'Add to favourites'}
+                                                    >
+                                                        {isSavingFavorite ? (
+                                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                                        ) : (
+                                                            <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
+                                                        )}
+                                                    </button>
+
+                                                    {/* Speaker button */}
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (speakingRoutes[index]) {
+                                                                handleStopSpeech(index);
+                                                            } else {
+                                                                handleDictateRoute(route, index);
+                                                            }
+                                                        }}
+                                                        disabled={dictatingRoutes[index]}
+                                                        className={`p-2 rounded-full transition-all ${
+                                                            dictatingRoutes[index]
+                                                                ? 'bg-orange-100 text-accent-orange cursor-not-allowed'
+                                                                : speakingRoutes[index]
+                                                                ? 'bg-red-50 text-red-600 hover:bg-red-100 hover:scale-110'
+                                                                : 'bg-blue-50 text-blue-600 hover:bg-blue-100 hover:scale-110'
+                                                        }`}
+                                                        title={speakingRoutes[index] ? 'Stop speaking' : 'Listen to route instructions'}
+                                                    >
+                                                        {dictatingRoutes[index] ? (
+                                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                                        ) : speakingRoutes[index] ? (
+                                                            <X className="w-5 h-5" />
+                                                        ) : (
+                                                            <Volume2 className="w-5 h-5" />
+                                                        )}
+                                                    </button>
+
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleShowOnMap(route); }}
                                                         className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-600 font-semibold rounded-xl hover:bg-blue-100 transition-colors text-xs border border-blue-100"
@@ -635,10 +809,32 @@ const FindRoutesPage = () => {
                                             <p className="text-xs text-gray-400 mt-3 flex items-center gap-1">
                                                 <ChevronRight className="w-3 h-3" /> Tap card to view full stop details
                                             </p>
+
+                                            {/* Dictation error for this card */}
+                                            {dictationErrors[index] && (
+                                                <p className="text-xs text-red-500 mt-2 flex items-center gap-1">
+                                                    <AlertCircle className="w-3 h-3 shrink-0" />
+                                                    {dictationErrors[index]}
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
                                 );
                             })}
+                        </div>
+                    )}
+
+                    {/* Favourite feedback messages */}
+                    {favoriteError && (
+                        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            {favoriteError}
+                        </div>
+                    )}
+                    {favoriteMessage && (
+                        <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 shrink-0" />
+                            {favoriteMessage}
                         </div>
                     )}
                 </div>
