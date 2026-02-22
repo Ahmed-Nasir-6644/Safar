@@ -224,9 +224,60 @@ export const usersAPI = {
     },
 };
 
+// ==================== SOS / Emergency ====================
+
+export const sosAPI = {
+    /**
+     * Send an SOS alert.
+     * Payload: { userId, message, location: { lat, lng } }
+     * Response: { success, message, data: { notifiedContacts: [...] } }
+     */
+    sendAlert: async (payload) => {
+        return authenticatedFetch('/api/sos', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+    },
+
+    /**
+     * Get all emergency contacts for a user.
+     * GET /api/sos/contacts/:userId
+     * Response: { success, message, data: [...contacts] }
+     */
+    getContacts: async (userId) => {
+        return authenticatedFetch(`/api/sos/contacts/${userId}`);
+    },
+
+    /**
+     * Add an emergency contact.
+     * Payload: { userId, name, email }
+     * Response: { success, message, data: { _id, userId, name, email } }
+     * Errors: 400 (missing/invalid fields), 404 (userId not found), 409 (duplicate email)
+     */
+    addContact: async (payload) => {
+        return authenticatedFetch('/api/sos/contacts', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+    },
+
+    /**
+     * Delete an emergency contact by contactId.
+     * Payload: { userId }
+     * Response: { success, message }
+     */
+    deleteContact: async (contactId, userId) => {
+        return authenticatedFetch(`/api/sos/contacts/${contactId}`, {
+            method: 'DELETE',
+            body: JSON.stringify({ userId }),
+        });
+    },
+};
+
 export default {
     gtfsAPI,
     routesAPI,
     usersAPI,
     bookingAPI,
+    sosAPI,
 };
