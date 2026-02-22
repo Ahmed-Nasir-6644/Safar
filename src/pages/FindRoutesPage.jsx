@@ -4,6 +4,7 @@ import { MapPin, ArrowRightLeft, Search, Loader2, Map, Mic, Clock, Navigation, A
 import { useNavigate } from 'react-router-dom';
 import { useGlobalContext } from '../context/GlobalContext';
 import { routesAPI } from '../utils/api';
+import PaymentFlow from '../components/PaymentFlow';
 
 const FindRoutesPage = () => {
     const [allStops, setAllStops] = useState([]);
@@ -816,6 +817,23 @@ const FindRoutesPage = () => {
                                                     <AlertCircle className="w-3 h-3 shrink-0" />
                                                     {dictationErrors[index]}
                                                 </p>
+                                            )}
+
+                                            {/* Payment flow — shown when this card is selected */}
+                                            {isSelected && (
+                                                <div
+                                                    className="mt-5"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    <div className="border-t border-gray-100 pt-5">
+                                                        <PaymentFlow
+                                                            fare={fare ? `Rs. ${fare}` : 'N/A'}
+                                                            routeData={route}
+                                                            fromStop={fromStop?.stop_name || ''}
+                                                            toStop={toStop?.stop_name || ''}
+                                                        />
+                                                    </div>
+                                                </div>
                                             )}
                                         </div>
                                     </div>

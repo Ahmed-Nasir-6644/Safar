@@ -166,6 +166,29 @@ export const routesAPI = {
     },
 };
 
+// ==================== Booking / Payment ====================
+
+export const bookingAPI = {
+    /**
+     * Book a ticket.
+     * Payload: { paymentMethod, fromStop, toStop, fare, routeData }
+     * Response: { success, message, data: { ticketNumber, fare, payment: { method, status, qrCodeImage?, qrPayload? } } }
+     */
+    bookTicket: async (payload) => {
+        return authenticatedFetch('/booking/book', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+    },
+
+    /**
+     * Get booking status by ticket number.
+     */
+    getBookingStatus: async (ticketNumber) => {
+        return authenticatedFetch(`/booking/status/${encodeURIComponent(ticketNumber)}`);
+    },
+};
+
 // ==================== User Routes (Protected) ====================
 
 export const usersAPI = {
@@ -205,4 +228,5 @@ export default {
     gtfsAPI,
     routesAPI,
     usersAPI,
+    bookingAPI,
 };

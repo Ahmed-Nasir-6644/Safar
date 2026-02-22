@@ -3,6 +3,7 @@ import { Search, Mic, MapPin, Navigation, Clock } from 'lucide-react';
 import { useGlobalContext } from '../context/GlobalContext';
 import { useLocation } from 'react-router-dom';
 import useRoutes from '../hooks/useRoutes';
+import PaymentFlow from '../components/PaymentFlow';
 
 const FindRoutePage = () => {
     const { t } = useGlobalContext();
@@ -380,7 +381,12 @@ const FindRoutePage = () => {
                                 </div>
 
                                 {/* Payment Section */}
-                                <PaymentSection fare={fareLabel} t={t} />
+                                <PaymentFlow
+                                    fare={fareLabel}
+                                    routeData={selectedRoute}
+                                    fromStop={source}
+                                    toStop={destination}
+                                />
                             </div>
                         </div>
                     </div>
@@ -389,87 +395,5 @@ const FindRoutePage = () => {
         </div>
     );
 };
-
-const PaymentSection = ({ fare, t }) => {
-    const [paymentStatus, setPaymentStatus] = useState('idle'); // idle, processing, success
-
-    const handlePayment = () => {
-        setPaymentStatus('processing');
-        setTimeout(() => {
-            setPaymentStatus('success');
-        }, 1500);
-    };
-
-    if (paymentStatus === 'success') {
-        return (
-            <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center animate-in zoom-in-95">
-                <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Navigation className="w-8 h-8" />
-                </div>
-                <h3 className="text-xl font-bold text-green-800 mb-1">{t('ticketBooked')}</h3>
-                <p className="text-green-600 text-sm mb-4">{t('qrGenerated')}</p>
-                <div className="bg-white p-4 rounded-lg inline-block shadow-sm border border-gray-200">
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=MetroMateTicket" alt="Ticket QR" className="w-24 h-24" />
-                </div>
-                <button
-                    onClick={() => setPaymentStatus('idle')}
-                    className="block mt-4 text-sm text-green-700 hover:underline mx-auto"
-                >
-                    {t('bookAnother')}
-                </button>
-            </div>
-        );
-    }
-
-    return (
-        <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
-            <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                {t('payFare')} <span className="text-accent-orange">{fare}</span>
-            </h4>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <button
-                    onClick={handlePayment}
-                    disabled={paymentStatus === 'processing'}
-                    className="flex flex-col items-center justify-center p-3 bg-white border border-gray-200 rounded-xl hover:border-green-400 hover:bg-green-50 transition-all group"
-                >
-                    <div className="w-8 h-8 bg-green-100 rounded-full mb-2 flex items-center justify-center text-green-600 group-hover:scale-110 transition-transform">
-                        <span className="font-bold text-xs">EP</span>
-                    </div>
-                    <span className="text-xs font-semibold text-gray-700">EasyPaisa</span>
-                </button>
-
-                <button
-                    onClick={handlePayment}
-                    disabled={paymentStatus === 'processing'}
-                    className="flex flex-col items-center justify-center p-3 bg-white border border-gray-200 rounded-xl hover:border-red-400 hover:bg-red-50 transition-all group"
-                >
-                    <div className="w-8 h-8 bg-red-100 rounded-full mb-2 flex items-center justify-center text-red-600 group-hover:scale-110 transition-transform">
-                        <span className="font-bold text-xs">JC</span>
-                    </div>
-                    <span className="text-xs font-semibold text-gray-700">JazzCash</span>
-                </button>
-
-                <button
-                    onClick={handlePayment}
-                    disabled={paymentStatus === 'processing'}
-                    className="flex flex-col items-center justify-center p-3 bg-white border border-gray-200 rounded-xl hover:border-gray-400 hover:bg-gray-100 transition-all group"
-                >
-                    <div className="w-8 h-8 bg-gray-100 rounded-full mb-2 flex items-center justify-center text-gray-600 group-hover:scale-110 transition-transform">
-                        <MapPin className="w-4 h-4" />
-                    </div>
-                    <span className="text-xs font-semibold text-gray-700">{t('payAtStation')}</span>
-                </button>
-            </div>
-
-            {paymentStatus === 'processing' && (
-                <div className="mt-4 text-center text-sm text-gray-500 animate-pulse">
-                    {t('processing')}
-                </div>
-            )}
-        </div>
-    );
-};
-
 
 export default FindRoutePage;
