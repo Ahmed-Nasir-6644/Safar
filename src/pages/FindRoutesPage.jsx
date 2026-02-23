@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { MapPin, ArrowRightLeft, Search, Loader2, Map, Mic, Clock, Navigation, AlertCircle, CheckCircle2, ArrowUpDown, Star, Repeat2, Bus, Train, Ruler, ArrowRight, X, Banknote, ChevronRight, ListOrdered, Volume2, Heart } from 'lucide-react';
+import { MapPin, ArrowRightLeft, Search, Loader2, Map, Mic, Clock, Navigation, AlertCircle, CheckCircle2, ArrowUpDown, Star, Repeat2, Bus, Train, ArrowRight, X, Banknote, ChevronRight, ListOrdered, Volume2, Heart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useGlobalContext } from '../context/GlobalContext';
 import { routesAPI } from '../utils/api';
@@ -152,7 +152,8 @@ const FindRoutesPage = () => {
         const from = route?.routeSegments?.[0]?.boardingStop || route?.routeStops?.[0]?.stop_name || 'unknown-from';
         const to = route?.routeSegments?.[route?.routeSegments?.length - 1]?.alightingStop
             || route?.routeStops?.[route?.routeStops?.length - 1]?.stop_name || 'unknown-to';
-        const distance = Number.isFinite(route?.totalDistance) ? route.totalDistance.toFixed(2) : 'na';
+        const routeDistance = getRouteTotalDistance(route);
+        const distance = Number.isFinite(routeDistance) ? routeDistance.toFixed(2) : 'na';
         return `${from}::${to}::${sequence}::${distance}`;
     };
 
@@ -266,6 +267,82 @@ const FindRoutesPage = () => {
         return km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(km * 1000)} m`;
     };
 
+    const parseDurationTextToMinutes = (value) => {
+        if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.round(value));
+        if (typeof value !== 'string') return null;
+        const hoursMatch = value.match(/(\d+(?:\.\d+)?)\s*(h|hr|hour)/i);
+        const minsMatch = value.match(/(\d+(?:\.\d+)?)\s*(m|min|minute)/i);
+        if (hoursMatch || minsMatch) {
+            const hours = hoursMatch ? Number.parseFloat(hoursMatch[1]) : 0;
+            const mins = minsMatch ? Number.parseFloat(minsMatch[1]) : 0;
+            return Math.max(0, Math.round(hours * 60 + mins));
+        }
+        const plain = Number.parseFloat(value);
+        return Number.isFinite(plain) ? Math.max(0, Math.round(plain)) : null;
+    };
+
+    const parseFareTextToPkr = (value) => {
+        if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.round(value));
+        if (typeof value !== 'string') return null;
+        const match = value.replace(/,/g, '').match(/(\d+(?:\.\d+)?)/);
+        if (!match) return null;
+        const numeric = Number.parseFloat(match[1]);
+        return Number.isFinite(numeric) ? Math.max(0, Math.round(numeric)) : null;
+    };
+
+    const getRouteTotalTime = (route) => {
+        return route?.durationMinutes
+            ?? route?.estimatedMinutes
+            ?? route?.total_time
+            ?? parseDurationTextToMinutes(route?.duration)
+            ?? null;
+    };
+
+    const getRouteTotalDistance = (route) => {
+        if (Number.isFinite(route?.distance)) return route.distance;
+        if (Number.isFinite(route?.totalDistance)) return route.totalDistance;
+        if (Number.isFinite(route?.total_distance)) return route.total_distance;
+        const segments = route?.routeSegments || route?.route_segments || [];
+        if (segments.length > 0) {
+            const sum = segments.reduce((acc, seg) => acc + (Number.parseFloat(seg?.distance) || 0), 0);
+            return Number.isFinite(sum) ? sum : null;
+        }
+        return null;
+    };
+
+    const getRouteTotalStops = (route) => {
+        if (Number.isFinite(route?.totalStops)) return route.totalStops;
+        const explicitStops = route?.routeStops || route?.path_stops || [];
+        if (explicitStops.length > 0) return explicitStops.length;
+        const segments = route?.routeSegments || route?.route_segments || [];
+        if (segments.length > 0) {
+            return segments.reduce((acc, seg) => acc + (Number.parseInt(seg?.stopCount, 10) || (seg?.stops || []).length || 0), 0);
+        }
+        return 0;
+    };
+
+    const getRouteTransfers = (route) => {
+        if (Number.isFinite(route?.transfers)) return Math.max(0, Math.round(route.transfers));
+        if (Number.isFinite(route?.transferCount)) return Math.max(0, Math.round(route.transferCount));
+        const segments = route?.routeSegments || route?.route_segments || [];
+        return Math.max(0, segments.length - 1);
+    };
+
+    const getRouteFareAmount = (route, fallbackDistanceKm) => {
+        if (Number.isFinite(route?.farePkr)) return route.farePkr;
+        if (Number.isFinite(route?.fare_pkr)) return route.fare_pkr;
+        if (Number.isFinite(route?.fare?.amount)) return route.fare.amount;
+        const parsed = parseFareTextToPkr(route?.fare);
+        if (parsed !== null) return parsed;
+        return estimateFare(fallbackDistanceKm);
+    };
+
+    const getRouteFareLabel = (route, fallbackDistanceKm) => {
+        if (typeof route?.fare === 'string' && route.fare.trim().length > 0) return route.fare;
+        const amount = getRouteFareAmount(route, fallbackDistanceKm);
+        return Number.isFinite(amount) ? `Rs. ${amount}` : 'N/A';
+    };
+
     // Fare estimate: Rs.30 base + Rs.8/km, rounded to nearest 5
     const estimateFare = (km) => {
         if (!km && km !== 0) return null;
@@ -297,9 +374,9 @@ const FindRoutesPage = () => {
 
     // Sort routes - updated to use new field names from reference backend
     const sortedRoutes = [...routes].sort((a, b) => {
-        if (sortBy === 'time') return (a.estimatedMinutes || 0) - (b.estimatedMinutes || 0);
-        if (sortBy === 'stops') return ((a.routeStops || a.path_stops || []).length) - ((b.routeStops || b.path_stops || []).length);
-        if (sortBy === 'transfers') return ((a.routeSegments || a.route_segments || []).length) - ((b.routeSegments || b.route_segments || []).length);
+        if (sortBy === 'time') return (getRouteTotalTime(a) || 0) - (getRouteTotalTime(b) || 0);
+        if (sortBy === 'stops') return getRouteTotalStops(a) - getRouteTotalStops(b);
+        if (sortBy === 'transfers') return getRouteTransfers(a) - getRouteTransfers(b);
         return 0;
     });
 
@@ -316,10 +393,11 @@ const FindRoutesPage = () => {
         // Support both old and new field names for compatibility
         const segments = route.routeSegments || route.route_segments || [];
         const stops = route.routeStops || route.path_stops || [];
-        const totalTime = route.estimatedMinutes || route.total_time;
-        const totalDist = route.totalDistance || route.total_distance;
-        // Fare from backend or estimate
-        const fare = route.fare?.amount || route.fare_pkr || estimateFare(totalDist);
+        const totalTime = getRouteTotalTime(route);
+        const totalDist = getRouteTotalDistance(route);
+        const totalStops = getRouteTotalStops(route);
+        const totalTransfers = getRouteTransfers(route);
+        const fareLabel = getRouteFareLabel(route, totalDist);
 
         return ReactDOM.createPortal(
             <div
@@ -353,9 +431,9 @@ const FindRoutesPage = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', borderBottom: '1px solid #f3f4f6', flexShrink: 0 }}>
                         {[
                             { Icon: Clock, label: 'Duration', value: formatTime(totalTime), color: '#f97316' },
-                            { Icon: Ruler, label: 'Distance', value: formatDistance(totalDist), color: '#3b82f6' },
-                            { Icon: Bus, label: 'Stops', value: stops.length, color: '#6b7280' },
-                            { Icon: Banknote, label: 'Est. Fare', value: fare ? `Rs. ${fare}` : 'N/A', color: '#10b981' },
+                            { Icon: Repeat2, label: 'Transfers', value: totalTransfers, color: '#3b82f6' },
+                            { Icon: Bus, label: 'Stops', value: totalStops, color: '#6b7280' },
+                            { Icon: Banknote, label: 'Est. Fare', value: fareLabel, color: '#10b981' },
                         ].map(({ Icon, label, value, color }, idx) => (
                             <div key={label} style={{
                                 padding: '12px 10px',
@@ -635,12 +713,13 @@ const FindRoutesPage = () => {
                                 // Support both old and new field names for compatibility
                                 const segments = route.routeSegments || route.route_segments || [];
                                 const stops = route.routeStops || route.path_stops || [];
-                                const totalTime = route.estimatedMinutes || route.total_time;
-                                const totalDist = route.totalDistance || route.total_distance;
+                                const totalTime = getRouteTotalTime(route);
+                                const totalDist = getRouteTotalDistance(route);
+                                const totalStops = getRouteTotalStops(route);
+                                const totalTransfers = getRouteTransfers(route);
                                 const isSelected = selectedRouteIndex === index;
                                 const isDirect = segments.length <= 1;
-                                // Fare from backend or estimate
-                                const fare = route.fare?.amount || route.fare_pkr || estimateFare(totalDist);
+                                const fareLabel = getRouteFareLabel(route, totalDist);
                                 const firstSegmentName = segments.length > 0 ? (segments[0].routeName || segments[0].route_name) : null;
                                 const accent = firstSegmentName ? getSegmentAccent(firstSegmentName) : { bg: 'bg-gray-300', light: 'bg-gray-50 text-gray-600 border-gray-200' };
 
@@ -749,9 +828,9 @@ const FindRoutesPage = () => {
                                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                                                 {[
                                                     { Icon: Clock, label: 'Duration', value: formatTime(totalTime), iconBg: 'bg-orange-50', iconColor: 'text-accent-orange' },
-                                                    { Icon: Ruler, label: 'Distance', value: formatDistance(totalDist), iconBg: 'bg-blue-50', iconColor: 'text-blue-500' },
-                                                    { Icon: Bus, label: 'Stops', value: stops.length, iconBg: 'bg-gray-100', iconColor: 'text-gray-500' },
-                                                    { Icon: Banknote, label: 'Est. Fare', value: fare ? `Rs. ${fare}` : 'N/A', iconBg: 'bg-green-50', iconColor: 'text-green-600' },
+                                                    { Icon: Repeat2, label: 'Transfers', value: totalTransfers, iconBg: 'bg-blue-50', iconColor: 'text-blue-500' },
+                                                    { Icon: Bus, label: 'Stops', value: totalStops, iconBg: 'bg-gray-100', iconColor: 'text-gray-500' },
+                                                    { Icon: Banknote, label: 'Est. Fare', value: fareLabel, iconBg: 'bg-green-50', iconColor: 'text-green-600' },
                                                 ].map(({ Icon, label, value, iconBg, iconColor }) => (
                                                     <div key={label} className={`flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100`}>
                                                         <div className={`w-9 h-9 rounded-xl ${iconBg} flex items-center justify-center shrink-0`}>
