@@ -77,16 +77,18 @@ const FeedbackForm = () => {
         setSubmitStatus(null);
 
         try {
-            const response = await fetch('http://localhost:8000/help/submit', {
+            const response = await fetch('http://localhost:5000/contact/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    fullName: form.fullName,
-                    emailAddress: form.emailAddress,
-                    message: form.message
-                })
+            body: JSON.stringify({
+                name: form.fullName,        // map fullName → name
+                email: form.emailAddress,   // map emailAddress → email
+                message: form.message,
+                fullName: form.fullName,
+                emailAddress: form.emailAddress
+            })
             });
 
             if (response.ok) {

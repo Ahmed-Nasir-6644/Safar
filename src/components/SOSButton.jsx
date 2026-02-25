@@ -189,6 +189,8 @@ const SOSButton = ({ children }) => {
     setAddError('');
     setDeleteError('');
     setIsOpen(true);
+    // Fetch the user's emergency contacts immediately on open
+    fetchContacts();
   };
 
   const closeModal = () => {
@@ -446,8 +448,20 @@ const SOSButton = ({ children }) => {
                   {/* Contacts preview */}
                   <div>
                     <p style={{ margin: '0 0 8px', fontWeight: 700, fontSize: 13, color: '#374151' }}>
-                      Emergency Contacts ({effectiveContacts.length})
+                      Emergency Contacts ({contactsLoading ? '…' : effectiveContacts.length})
                     </p>
+                    {contactsLoading ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', backgroundColor: '#f9fafb', borderRadius: 12, border: '1px solid #e5e7eb' }}>
+                        <Loader2 size={15} color="#dc2626" style={{ flexShrink: 0, animation: 'spin 1s linear infinite' }} />
+                        <span style={{ fontSize: 13, color: '#6b7280' }}>Loading your contacts…</span>
+                      </div>
+                    ) : contactsError ? (
+                      <div style={{ ...S.banner('red'), marginBottom: 0 }}>
+                        <AlertTriangle size={15} color="#dc2626" style={{ flexShrink: 0 }} />
+                        <span style={{ fontSize: 12, color: '#b91c1c' }}>{contactsError}</span>
+                      </div>
+                    ) : (
+                    <>
                     <div style={S.card()}>
                       {effectiveContacts.map((c, i) => (
                         <div key={i} style={S.contactRow(i === effectiveContacts.length - 1)}>
@@ -466,6 +480,8 @@ const SOSButton = ({ children }) => {
                     >
                       + Manage contacts
                     </button>
+                    </>
+                    )}
                   </div>
 
                   {/* Message */}

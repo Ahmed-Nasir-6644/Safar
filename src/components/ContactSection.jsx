@@ -27,13 +27,19 @@ const ContactSection = () => {
         setSubmitStatus(null);
 
         try {
-            const response = await fetch('http://localhost:8000/contact/submit', {
+            const response = await fetch('http://localhost:5000/contact/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(formData)
-            });
+            body: JSON.stringify({
+                name: formData.fullName,        // map fullName → name
+                email: formData.emailAddress,   // map emailAddress → email
+                message: formData.message,
+                fullName: formData.fullName,
+                emailAddress: formData.emailAddress
+            })
+                    });
 
             if (response.ok) {
                 setSubmitStatus('success');

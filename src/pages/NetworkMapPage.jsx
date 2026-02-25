@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { MapContainer, TileLayer, GeoJSON, useMap, Marker, Popup, Polyline, CircleMarker, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Map, Info, Bus, Train, Eye, EyeOff, Filter, Layers, Search, X, MapPin, Navigation, Loader, XCircle, Clock, Route as RouteIcon } from 'lucide-react';
+import { Map, Info, Bus, Train, Eye, EyeOff, Filter, Layers, Search, X, MapPin, Navigation, Loader, XCircle, Clock, Route as RouteIcon, ArrowLeft } from 'lucide-react';
 import { useGlobalContext } from '../context/GlobalContext';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 // Fix for default marker icons in Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -87,12 +87,15 @@ const TileLayerController = ({ isDarkMode }) => {
 // Component to fit map bounds to a set of LatLng positions
 const FitBoundsController = ({ positions }) => {
     const map = useMap();
+    const hasFitRef = useRef(false);
 
     useEffect(() => {
+        if (hasFitRef.current) return;
         if (positions && positions.length > 1) {
             try {
                 const bounds = L.latLngBounds(positions);
                 map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+                hasFitRef.current = true;
             } catch (e) {
                 console.warn('FitBounds error:', e);
             }
@@ -102,9 +105,223 @@ const FitBoundsController = ({ positions }) => {
     return null;
 };
 
+// Extracted component so useMemo stabilises allPositions and FitBoundsController only fires once
+const RoutingMapLayer = ({ routingData, getRouteColor }) => {
+    const segments = routingData.routeSegments || routingData.route_segments || [];
+
+    const allPositions = useMemo(() =>
+        segments.flatMap(seg =>
+            (seg.stops || []).map(s => [
+                s.stop_lat ?? s.lat ?? 0,
+                s.stop_lon ?? s.lng ?? 0
+            ])
+        ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [routingData]   // only recalculate when a new routingData object is set
+    );
+
+    const transferPoints = useMemo(() =>
+        segments.slice(0, -1).map(seg => {
+            const stops = seg.stops || [];
+            const last = stops[stops.length - 1];
+            if (!last) return null;
+            return {
+                lat: last.stop_lat ?? last.lat,
+                lon: last.stop_lon ?? last.lng,
+                name: last.stop_name || seg.alightingStop || ''
+            };
+        }).filter(Boolean),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [routingData]
+    );
+
+    const firstSeg = segments[0] || {};
+    const lastSeg = segments[segments.length - 1] || {};
+    const firstStops = firstSeg.stops || [];
+    const lastStops = lastSeg.stops || [];
+    const startStop = firstStops[0] || {};
+    const endStop = lastStops[lastStops.length - 1] || {};
+
+    const startIcon = useMemo(() => L.divIcon({
+        className: 'custom-marker-start',
+        html: `
+            <div class="relative">
+                <div class="w-4 h-4 rounded-full bg-green-500 border-2 border-white shadow-md absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 animate-ping opacity-75"></div>
+                <div class="w-8 h-8 rounded-full bg-green-600 border-4 border-white shadow-xl flex items-center justify-center text-white relative z-10">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                </div>
+                <div class="absolute -bottom-7 left-1/2 transform -translate-x-1/2 bg-white px-2 py-0.5 rounded text-[10px] font-bold shadow-sm whitespace-nowrap border border-gray-100 text-green-700 z-20">START</div>
+            </div>
+        `,
+        iconSize: [40, 40],
+        iconAnchor: [20, 20]
+    }), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const endIcon = useMemo(() => L.divIcon({
+        className: 'custom-marker-end',
+        html: `
+            <div class="relative">
+                <div class="w-4 h-4 rounded-full bg-red-500 border-2 border-white shadow-md absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 animate-ping opacity-75"></div>
+                <div class="w-8 h-8 rounded-full bg-red-600 border-4 border-white shadow-xl flex items-center justify-center text-white relative z-10">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>
+                </div>
+                <div class="absolute -bottom-7 left-1/2 transform -translate-x-1/2 bg-white px-2 py-0.5 rounded text-[10px] font-bold shadow-sm whitespace-nowrap border border-gray-100 text-red-700 z-20">END</div>
+            </div>
+        `,
+        iconSize: [40, 40],
+        iconAnchor: [20, 20]
+    }), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    return (
+        <>
+            {/* Fit map to full journey extent — only fires once thanks to FitBoundsController's hasFitRef */}
+            {allPositions.length > 1 && (
+                <FitBoundsController positions={allPositions} />
+            )}
+
+            {/* Draw each segment as a colored polyline */}
+            {segments.map((segment, index) => {
+                const segColor = getRouteColor(segment.routeId || segment.route_id || segment.routeName || '');
+                const positions = (segment.stops || []).map(s => [
+                    s.stop_lat ?? s.lat ?? 0,
+                    s.stop_lon ?? s.lng ?? 0
+                ]).filter(([lat, lon]) => lat !== 0 || lon !== 0);
+
+                if (positions.length < 2) return null;
+
+                return (
+                    <React.Fragment key={`segment-${index}`}>
+                        {/* Glow / halo effect */}
+                        <Polyline
+                            positions={positions}
+                            pathOptions={{
+                                color: segColor,
+                                weight: 12,
+                                opacity: 0.25,
+                                lineCap: 'round',
+                                lineJoin: 'round'
+                            }}
+                        />
+                        {/* Main segment line */}
+                        <Polyline
+                            positions={positions}
+                            pathOptions={{
+                                color: segColor,
+                                weight: 5,
+                                opacity: 0.95,
+                                lineCap: 'round',
+                                lineJoin: 'round'
+                            }}
+                        >
+                            <Tooltip sticky direction="top" offset={[0, -4]} opacity={0.9}>
+                                <span className="font-semibold text-xs">
+                                    🚌 {segment.routeName || segment.route_name || segment.routeId}
+                                </span>
+                                {segment.boardingStop && segment.alightingStop && (
+                                    <span className="block text-[10px] text-gray-600 mt-0.5">
+                                        {segment.boardingStop} → {segment.alightingStop}
+                                    </span>
+                                )}
+                            </Tooltip>
+                        </Polyline>
+
+                        {/* Intermediate stop dots along the segment */}
+                        {(segment.stops || []).slice(1, -1).map((stop, si) => {
+                            const lat = stop.stop_lat ?? stop.lat;
+                            const lon = stop.stop_lon ?? stop.lng;
+                            if (!lat || !lon) return null;
+                            return (
+                                <CircleMarker
+                                    key={`seg-${index}-stop-${si}`}
+                                    center={[lat, lon]}
+                                    radius={3}
+                                    pathOptions={{
+                                        color: segColor,
+                                        fillColor: '#ffffff',
+                                        fillOpacity: 1,
+                                        weight: 2
+                                    }}
+                                >
+                                    <Tooltip direction="top" offset={[0, -4]} opacity={0.9}>
+                                        <span className="text-xs">{stop.stop_name || stop.name}</span>
+                                    </Tooltip>
+                                </CircleMarker>
+                            );
+                        })}
+                    </React.Fragment>
+                );
+            })}
+
+            {/* Transfer markers at segment junctions */}
+            {transferPoints.map((pt, i) => (
+                <CircleMarker
+                    key={`transfer-${i}`}
+                    center={[pt.lat, pt.lon]}
+                    radius={9}
+                    pathOptions={{
+                        color: '#ffffff',
+                        fillColor: '#F59E0B',
+                        fillOpacity: 1,
+                        weight: 3
+                    }}
+                >
+                    <Popup className="custom-popup">
+                        <div className="text-center">
+                            <div className="text-xs font-bold text-amber-600 uppercase mb-1">
+                                🔄 Transfer Stop
+                            </div>
+                            <div className="text-sm font-semibold">{pt.name}</div>
+                            <div className="text-xs text-gray-500 mt-1">
+                                Board next bus here
+                            </div>
+                        </div>
+                    </Popup>
+                    <Tooltip direction="top" offset={[0, -6]} opacity={0.9}>
+                        <span className="text-xs font-semibold">Transfer: {pt.name}</span>
+                    </Tooltip>
+                </CircleMarker>
+            ))}
+
+            {/* START marker */}
+            {(startStop.stop_lat ?? startStop.lat) !== undefined && (
+                <Marker
+                    position={[startStop.stop_lat ?? startStop.lat, startStop.stop_lon ?? startStop.lng]}
+                    icon={startIcon}
+                    zIndexOffset={1000}
+                >
+                    <Popup className="custom-popup" offset={[0, -10]}>
+                        <div className="font-bold text-center">
+                            <div className="text-xs text-green-600 uppercase mb-1">Start Journey</div>
+                            {startStop.stop_name || startStop.name || firstSeg.boardingStop || 'Start'}
+                        </div>
+                    </Popup>
+                </Marker>
+            )}
+
+            {/* END marker */}
+            {(endStop.stop_lat ?? endStop.lat) !== undefined && (
+                <Marker
+                    position={[endStop.stop_lat ?? endStop.lat, endStop.stop_lon ?? endStop.lng]}
+                    icon={endIcon}
+                    zIndexOffset={1000}
+                >
+                    <Popup className="custom-popup" offset={[0, -10]}>
+                        <div className="font-bold text-center">
+                            <div className="text-xs text-red-600 uppercase mb-1">Destination</div>
+                            {endStop.stop_name || endStop.name || lastSeg.alightingStop || 'End'}
+                        </div>
+                    </Popup>
+                </Marker>
+            )}
+        </>
+    );
+};
+
 const NetworkMapPage = () => {
     const { t } = useGlobalContext();
     const location = useLocation();
+    const navigate = useNavigate();
+    const cameFromFindRoutes = useRef(!!location.state?.routeToDisplay);
     const [routes, setRoutes] = useState({});
     const [stops, setStops] = useState(null);
     const [stopsList, setStopsList] = useState([]);
@@ -468,43 +685,20 @@ const NetworkMapPage = () => {
     const onEachStop = (feature, layer) => {
         if (feature.properties && feature.properties.stop_name) {
             const stopName = feature.properties.stop_name;
-            const coords = feature.geometry.coordinates;
 
             const popupContent = `
-                <div style="font-family:'Poppins',sans-serif; min-width:200px; padding:4px">
-                    <div style="font-weight:700; color:#111827; margin-bottom:10px; font-size:14px; border-bottom:1px solid #e5e7eb; padding-bottom:8px; line-height:1.4">${stopName}</div>
-                    ${!routingMode ? `
-                        <button 
-                            onclick="window.startRoutingFromStop('${stopName}', ${coords[1]}, ${coords[0]})"
-                            style="display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:10px 16px; background:#f97316; color:white; border:none; border-radius:10px; font-weight:700; font-size:13px; cursor:pointer; font-family:'Poppins',sans-serif;"
-                            onmouseover="this.style.background='#ea6c08'"
-                            onmouseout="this.style.background='#f97316'"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 16 16 12 12 8"></polyline><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-                            Start Routing Here
-                        </button>
-                    ` : ''}
+                <div style="font-family:'Poppins',sans-serif; padding:4px">
+                    <div style="font-weight:700; color:#111827; font-size:14px; line-height:1.4">${stopName}</div>
                 </div>
             `;
 
             layer.bindPopup(popupContent, {
                 className: 'custom-popup',
                 maxWidth: 280,
-                minWidth: 200
+                minWidth: 160
             });
         }
     };
-
-    // Global function for popup button
-    useEffect(() => {
-        window.startRoutingFromStop = (stopName, lat, lng) => {
-            handleStartRouting({ name: stopName, lat, lng });
-        };
-
-        return () => {
-            delete window.startRoutingFromStop;
-        };
-    }, [routingMode]);
 
     return (
         <div className="pt-24 pb-0 min-h-screen bg-gray-50 flex flex-col font-sans">
@@ -618,16 +812,36 @@ const NetworkMapPage = () => {
                                 <div className="p-2.5 bg-orange-100 rounded-xl shrink-0">
                                     <RouteIcon className="w-5 h-5 text-accent-orange" />
                                 </div>
-                                <div className="min-w-0">
+                                <div className="min-w-0 flex-1">
                                     <h3 className="text-lg font-bold text-gray-900">Route Found!</h3>
                                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500 mt-0.5">
-                                        <span>{typeof totalDistance === 'number' ? totalDistance.toFixed(2) : totalDistance} km</span>
-                                        <span className="text-gray-300">•</span>
-                                        <span>{totalTime} min</span>
-                                        <span className="text-gray-300">•</span>
-                                        <span>{pathStops.length} stops</span>
+                                        {totalDistance > 0 && (
+                                            <>
+                                                <span>{typeof totalDistance === 'number' ? totalDistance.toFixed(2) : totalDistance} km</span>
+                                                <span className="text-gray-300">•</span>
+                                            </>
+                                        )}
+                                        {totalTime > 0 && (
+                                            <>
+                                                <span>{totalTime} min</span>
+                                                <span className="text-gray-300">•</span>
+                                            </>
+                                        )}
+                                        {pathStops.length > 0 && (
+                                            <span>{pathStops.length} stops</span>
+                                        )}
                                     </div>
                                 </div>
+                                {/* Back to results button — only shown when navigated from FindRoutesPage */}
+                                {cameFromFindRoutes.current && (
+                                    <button
+                                        onClick={() => navigate(-1)}
+                                        className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm rounded-xl border border-gray-200 transition-colors shrink-0"
+                                    >
+                                        <ArrowLeft className="w-4 h-4" />
+                                        Back
+                                    </button>
+                                )}
                             </div>
 
                             {/* Row 2: Route visualizer + Clear button */}
@@ -793,22 +1007,42 @@ const NetworkMapPage = () => {
                                 <div className="space-y-4 overflow-y-auto flex-grow pr-2 pl-2">
                                     {segments.map((segment, index) => {
                                         const routeName = segment.routeName || segment.route_name;
-                                        const segColor = segment.color || '#6B7280';
+                                        const segColor = getRouteColor(segment.routeId || segment.route_id || routeName || '');
                                         const segStops = segment.stops || [];
+                                        const boardingStop = segment.boardingStop || segStops[0]?.stop_name || segStops[0]?.name || '';
+                                        const alightingStop = segment.alightingStop || segStops[segStops.length - 1]?.stop_name || segStops[segStops.length - 1]?.name || '';
                                         return (
-                                        <div key={index} className="relative pl-8 pb-8 last:pb-0 border-l-2 border-gray-100 last:border-l-0 ml-2">
+                                        <div key={index} className="relative pl-8 pb-6 last:pb-0 border-l-2 border-gray-100 last:border-l-0 ml-2">
                                             <div
                                                 className="absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 border-white shadow-sm"
                                                 style={{ backgroundColor: segColor }}
                                             ></div>
                                             <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
                                                 <p className="text-xs text-gray-500 font-bold mb-1">STEP {index + 1}</p>
-                                                <p className="font-bold text-gray-900 mb-1">
+                                                <p className="font-bold text-gray-900 mb-2">
                                                     Take <span style={{ color: segColor }}>{routeName}</span>
                                                 </p>
-                                                <p className="text-xs text-gray-500">
-                                                    {segStops.length} stops • {Math.round(segStops.length * 2)} min approx
-                                                </p>
+                                                {boardingStop && (
+                                                    <div className="flex items-start gap-2 mb-1">
+                                                        <div className="w-2 h-2 rounded-full bg-green-500 mt-1 shrink-0" />
+                                                        <div>
+                                                            <p className="text-[10px] text-gray-400 font-semibold uppercase leading-none mb-0.5">Board at</p>
+                                                            <p className="text-xs text-gray-700 font-medium leading-snug">{boardingStop}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {alightingStop && alightingStop !== boardingStop && (
+                                                    <div className="flex items-start gap-2">
+                                                        <div className="w-2 h-2 rounded-full bg-red-400 mt-1 shrink-0" />
+                                                        <div>
+                                                            <p className="text-[10px] text-gray-400 font-semibold uppercase leading-none mb-0.5">{index < segments.length - 1 ? 'Transfer at' : 'Alight at'}</p>
+                                                            <p className="text-xs text-gray-700 font-medium leading-snug">{alightingStop}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {segStops.length > 0 && (
+                                                    <p className="text-[10px] text-gray-400 mt-2">{segStops.length} stops</p>
+                                                )}
                                             </div>
                                         </div>
                                         );
@@ -956,8 +1190,9 @@ const NetworkMapPage = () => {
                                         ));
                                     })}
 
-                                    {stops && (
+                                    {stops && currentZoom >= ZOOM_THRESHOLD && (
                                         <GeoJSON
+                                            key={`stops-zoom-${Math.floor(currentZoom)}`}
                                             data={stops}
                                             pointToLayer={pointToLayer}
                                             onEachFeature={onEachStop}
@@ -967,213 +1202,9 @@ const NetworkMapPage = () => {
                             )}
 
                             {/* ROUTING MODE: Show specific path and segments */}
-                            {routingMode && routingData && (() => {
-                                // Support both old and new field names
-                                const segments = routingData.routeSegments || routingData.route_segments || [];
-                                const pathStops = routingData.routeStops || routingData.path_stops || [];
-
-                                // Build all journey positions for FitBounds
-                                const allPositions = segments.flatMap(seg =>
-                                    (seg.stops || []).map(s => [
-                                        s.stop_lat ?? s.lat ?? 0,
-                                        s.stop_lon ?? s.lng ?? 0
-                                    ])
-                                );
-
-                                // Collect transfer points (alighting of seg N = boarding of seg N+1)
-                                const transferPoints = segments.slice(0, -1).map(seg => {
-                                    const stops = seg.stops || [];
-                                    const last = stops[stops.length - 1];
-                                    if (!last) return null;
-                                    return {
-                                        lat: last.stop_lat ?? last.lat,
-                                        lon: last.stop_lon ?? last.lng,
-                                        name: last.stop_name || seg.alightingStop || ''
-                                    };
-                                }).filter(Boolean);
-
-                                // Start and end stops
-                                const firstSeg = segments[0] || {};
-                                const lastSeg = segments[segments.length - 1] || {};
-                                const firstStops = firstSeg.stops || [];
-                                const lastStops = lastSeg.stops || [];
-                                const startStop = firstStops[0] || {};
-                                const endStop = lastStops[lastStops.length - 1] || {};
-
-                                const startIcon = L.divIcon({
-                                    className: 'custom-marker-start',
-                                    html: `
-                                        <div class="relative">
-                                            <div class="w-4 h-4 rounded-full bg-green-500 border-2 border-white shadow-md absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 animate-ping opacity-75"></div>
-                                            <div class="w-8 h-8 rounded-full bg-green-600 border-4 border-white shadow-xl flex items-center justify-center text-white relative z-10">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                                            </div>
-                                            <div class="absolute -bottom-7 left-1/2 transform -translate-x-1/2 bg-white px-2 py-0.5 rounded text-[10px] font-bold shadow-sm whitespace-nowrap border border-gray-100 text-green-700 z-20">START</div>
-                                        </div>
-                                    `,
-                                    iconSize: [40, 40],
-                                    iconAnchor: [20, 20]
-                                });
-
-                                const endIcon = L.divIcon({
-                                    className: 'custom-marker-end',
-                                    html: `
-                                        <div class="relative">
-                                            <div class="w-4 h-4 rounded-full bg-red-500 border-2 border-white shadow-md absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 animate-ping opacity-75"></div>
-                                            <div class="w-8 h-8 rounded-full bg-red-600 border-4 border-white shadow-xl flex items-center justify-center text-white relative z-10">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>
-                                            </div>
-                                            <div class="absolute -bottom-7 left-1/2 transform -translate-x-1/2 bg-white px-2 py-0.5 rounded text-[10px] font-bold shadow-sm whitespace-nowrap border border-gray-100 text-red-700 z-20">END</div>
-                                        </div>
-                                    `,
-                                    iconSize: [40, 40],
-                                    iconAnchor: [20, 20]
-                                });
-
-                                return (
-                                    <>
-                                        {/* Fit map to full journey extent */}
-                                        {allPositions.length > 1 && (
-                                            <FitBoundsController positions={allPositions} />
-                                        )}
-
-                                        {/* Draw each segment as a colored polyline */}
-                                        {segments.map((segment, index) => {
-                                            const segColor = getRouteColor(segment.routeId || segment.route_id || segment.routeName || '');
-                                            const positions = (segment.stops || []).map(s => [
-                                                s.stop_lat ?? s.lat ?? 0,
-                                                s.stop_lon ?? s.lng ?? 0
-                                            ]).filter(([lat, lon]) => lat !== 0 || lon !== 0);
-
-                                            if (positions.length < 2) return null;
-
-                                            return (
-                                                <React.Fragment key={`segment-${index}`}>
-                                                    {/* Glow / halo effect */}
-                                                    <Polyline
-                                                        positions={positions}
-                                                        pathOptions={{
-                                                            color: segColor,
-                                                            weight: 12,
-                                                            opacity: 0.25,
-                                                            lineCap: 'round',
-                                                            lineJoin: 'round'
-                                                        }}
-                                                    />
-                                                    {/* Main segment line */}
-                                                    <Polyline
-                                                        positions={positions}
-                                                        pathOptions={{
-                                                            color: segColor,
-                                                            weight: 5,
-                                                            opacity: 0.95,
-                                                            lineCap: 'round',
-                                                            lineJoin: 'round'
-                                                        }}
-                                                    >
-                                                        <Tooltip sticky direction="top" offset={[0, -4]} opacity={0.9}>
-                                                            <span className="font-semibold text-xs">
-                                                                🚌 {segment.routeName || segment.route_name || segment.routeId}
-                                                            </span>
-                                                            {segment.boardingStop && segment.alightingStop && (
-                                                                <span className="block text-[10px] text-gray-600 mt-0.5">
-                                                                    {segment.boardingStop} → {segment.alightingStop}
-                                                                </span>
-                                                            )}
-                                                        </Tooltip>
-                                                    </Polyline>
-
-                                                    {/* Intermediate stop dots along the segment */}
-                                                    {(segment.stops || []).slice(1, -1).map((stop, si) => {
-                                                        const lat = stop.stop_lat ?? stop.lat;
-                                                        const lon = stop.stop_lon ?? stop.lng;
-                                                        if (!lat || !lon) return null;
-                                                        return (
-                                                            <CircleMarker
-                                                                key={`seg-${index}-stop-${si}`}
-                                                                center={[lat, lon]}
-                                                                radius={3}
-                                                                pathOptions={{
-                                                                    color: segColor,
-                                                                    fillColor: '#ffffff',
-                                                                    fillOpacity: 1,
-                                                                    weight: 2
-                                                                }}
-                                                            >
-                                                                <Tooltip direction="top" offset={[0, -4]} opacity={0.9}>
-                                                                    <span className="text-xs">{stop.stop_name || stop.name}</span>
-                                                                </Tooltip>
-                                                            </CircleMarker>
-                                                        );
-                                                    })}
-                                                </React.Fragment>
-                                            );
-                                        })}
-
-                                        {/* Transfer markers at segment junctions */}
-                                        {transferPoints.map((pt, i) => (
-                                            <CircleMarker
-                                                key={`transfer-${i}`}
-                                                center={[pt.lat, pt.lon]}
-                                                radius={9}
-                                                pathOptions={{
-                                                    color: '#ffffff',
-                                                    fillColor: '#F59E0B',
-                                                    fillOpacity: 1,
-                                                    weight: 3
-                                                }}
-                                            >
-                                                <Popup className="custom-popup">
-                                                    <div className="text-center">
-                                                        <div className="text-xs font-bold text-amber-600 uppercase mb-1">
-                                                            🔄 Transfer Stop
-                                                        </div>
-                                                        <div className="text-sm font-semibold">{pt.name}</div>
-                                                        <div className="text-xs text-gray-500 mt-1">
-                                                            Board next bus here
-                                                        </div>
-                                                    </div>
-                                                </Popup>
-                                                <Tooltip direction="top" offset={[0, -6]} opacity={0.9}>
-                                                    <span className="text-xs font-semibold">Transfer: {pt.name}</span>
-                                                </Tooltip>
-                                            </CircleMarker>
-                                        ))}
-
-                                        {/* START marker */}
-                                        {(startStop.stop_lat ?? startStop.lat) !== undefined && (
-                                            <Marker
-                                                position={[startStop.stop_lat ?? startStop.lat, startStop.stop_lon ?? startStop.lng]}
-                                                icon={startIcon}
-                                                zIndexOffset={1000}
-                                            >
-                                                <Popup className="custom-popup" offset={[0, -10]}>
-                                                    <div className="font-bold text-center">
-                                                        <div className="text-xs text-green-600 uppercase mb-1">Start Journey</div>
-                                                        {startStop.stop_name || startStop.name || firstSeg.boardingStop || 'Start'}
-                                                    </div>
-                                                </Popup>
-                                            </Marker>
-                                        )}
-
-                                        {/* END marker */}
-                                        {(endStop.stop_lat ?? endStop.lat) !== undefined && (
-                                            <Marker
-                                                position={[endStop.stop_lat ?? endStop.lat, endStop.stop_lon ?? endStop.lng]}
-                                                icon={endIcon}
-                                                zIndexOffset={1000}
-                                            >
-                                                <Popup className="custom-popup" offset={[0, -10]}>
-                                                    <div className="font-bold text-center">
-                                                        <div className="text-xs text-red-600 uppercase mb-1">Destination</div>
-                                                        {endStop.stop_name || endStop.name || lastSeg.alightingStop || 'End'}
-                                                    </div>
-                                                </Popup>
-                                            </Marker>
-                                        )}
-                                    </>
-                                );
-                            })()}
+                            {routingMode && routingData && (
+                                <RoutingMapLayer routingData={routingData} getRouteColor={getRouteColor} />
+                            )}
                         </MapContainer>
                     </div>
                 </div>

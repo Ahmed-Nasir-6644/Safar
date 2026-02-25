@@ -1,8 +1,14 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useGlobalContext } from '../context/GlobalContext';
 
 const HeroSection = () => {
     const { t } = useGlobalContext();
+    const navigate = useNavigate();
+
+    const handlePlanRoute = () => {
+        navigate('/network-map');
+    };
 
     return (
         <section id="hero" className="relative min-h-screen flex flex-col items-center justify-center text-center pt-20 my-container bg-white">
@@ -16,7 +22,10 @@ const HeroSection = () => {
                 {t('welcomeFeature')}
             </p>
 
-            <button className="mt-10 px-8 py-4 bg-accent-orange text-white text-lg font-semibold rounded-full shadow-xl shadow-orange-500/30 hover:scale-105 hover:bg-orange-600 transition-all duration-300">
+            <button 
+                onClick={handlePlanRoute}
+                className="mt-10 px-8 py-4 bg-accent-orange text-white text-lg font-semibold rounded-full shadow-xl shadow-orange-500/30 hover:scale-105 hover:bg-orange-600 transition-all duration-300"
+            >
                 {t('planRoute')}
             </button>
         </section>

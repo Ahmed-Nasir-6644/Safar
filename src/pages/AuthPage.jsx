@@ -87,7 +87,7 @@ const AuthPage = () => {
                             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                             <input
                                 type="email"
-                                placeholder="Email Address (Optional for Demo)"
+                                placeholder="Email Address"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-accent-orange transition-all font-poppins"
@@ -98,7 +98,7 @@ const AuthPage = () => {
                             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                             <input
                                 type="password"
-                                placeholder="Password (Optional for Demo)"
+                                placeholder="Password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-accent-orange transition-all font-poppins"
