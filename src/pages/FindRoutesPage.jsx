@@ -906,7 +906,7 @@ const FindRoutesPage = () => {
                                                 >
                                                     <div className="border-t border-gray-100 pt-5">
                                                         <PaymentFlow
-                                                            fare={fare ? `Rs. ${fare}` : 'N/A'}
+                                                            fare={fareLabel}
                                                             routeData={route}
                                                             fromStop={fromStop?.stop_name || ''}
                                                             toStop={toStop?.stop_name || ''}
