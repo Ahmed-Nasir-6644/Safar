@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGlobalContext } from '../context/GlobalContext';
 import { routesAPI } from '../utils/api';
 import PaymentFlow from '../components/PaymentFlow';
+import VoiceSearchModal from '../components/VoiceSearchModal';
 
 const FindRoutesPage = () => {
     const [allStops, setAllStops] = useState([]);
@@ -27,11 +28,6 @@ const FindRoutesPage = () => {
 
     // ---- Voice search modal state ----
     const [showVoiceModal, setShowVoiceModal] = useState(false);
-    const [voiceTranscript, setVoiceTranscript] = useState('');
-    const [voiceListening, setVoiceListening] = useState(false);
-    const [voiceProcessing, setVoiceProcessing] = useState(false);
-    const [voiceError, setVoiceError] = useState('');
-    const voiceRecognitionRef = useRef(null);
 
     // ---- Speaker / dictation state ----
     const [dictatingRoutes, setDictatingRoutes] = useState({});
@@ -123,119 +119,23 @@ const FindRoutesPage = () => {
         setHasSearched(false);
     };
 
-    // ---- Intelligent Voice Search ----
-    const openVoiceModal = () => {
-        setShowVoiceModal(true);
-        setVoiceTranscript('');
-        setVoiceError('');
-        setVoiceProcessing(false);
-        setVoiceListening(false);
-    };
+    // ---- Voice search ----
+    const openVoiceModal  = () => setShowVoiceModal(true);
+    const closeVoiceModal = () => setShowVoiceModal(false);
 
-    const closeVoiceModal = () => {
-        if (voiceRecognitionRef.current) {
-            try { voiceRecognitionRef.current.abort(); } catch {}
-            voiceRecognitionRef.current = null;
-        }
-        setShowVoiceModal(false);
-        setVoiceTranscript('');
-        setVoiceError('');
-        setVoiceProcessing(false);
-        setVoiceListening(false);
-    };
+    // Called by VoiceSearchModal when backend returns a valid prediction
+    const handleVoiceRouteFound = ({ source, destination }) => {
+        const sourceStop = allStops.find(s => s.stop_name.toLowerCase() === source.toLowerCase())
+            || allStops.find(s => s.stop_name.toLowerCase().includes(source.toLowerCase()));
+        const destStop = allStops.find(s => s.stop_name.toLowerCase() === destination.toLowerCase())
+            || allStops.find(s => s.stop_name.toLowerCase().includes(destination.toLowerCase()));
 
-    const startVoiceListening = () => {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            setVoiceError('Speech recognition is not supported in your browser.');
-            return;
-        }
-        setVoiceError('');
-        setVoiceTranscript('');
-        const recognition = new SpeechRecognition();
-        recognition.lang = 'en-US';
-        recognition.interimResults = true;
-        recognition.maxAlternatives = 1;
-        voiceRecognitionRef.current = recognition;
+        setFromQuery(source);
+        setToQuery(destination);
+        setFromStop(sourceStop || { stop_name: source, stop_id: null });
+        setToStop(destStop   || { stop_name: destination, stop_id: null });
 
-        recognition.onresult = (event) => {
-            let transcript = '';
-            for (let i = 0; i < event.results.length; i++) {
-                transcript += event.results[i][0].transcript;
-            }
-            setVoiceTranscript(transcript);
-        };
-
-        recognition.onend = () => {
-            setVoiceListening(false);
-            setVoiceTranscript(prev => {
-                if (prev && prev.trim()) {
-                    processVoiceTranscript(prev.trim());
-                }
-                return prev;
-            });
-        };
-
-        recognition.onerror = (event) => {
-            setVoiceListening(false);
-            if (event.error === 'no-speech') {
-                setVoiceError('No speech detected. Please try again.');
-            } else if (event.error !== 'aborted') {
-                setVoiceError('Could not recognize speech. Please try again.');
-            }
-        };
-
-        setVoiceListening(true);
-        recognition.start();
-    };
-
-    const stopVoiceListening = () => {
-        if (voiceRecognitionRef.current) {
-            try { voiceRecognitionRef.current.stop(); } catch {}
-        }
-    };
-
-    const processVoiceTranscript = async (transcript) => {
-        setVoiceProcessing(true);
-        setVoiceError('');
-        try {
-            const response = await fetch('http://localhost:8000/voice-search', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ transcript }),
-            });
-            const data = await response.json();
-            if (data.success && data.prediction) {
-                const source = data.prediction.source;
-                const destination = data.prediction.destination;
-                if (!source || !destination) {
-                    setVoiceError('Could not recognize stops. Please try again.');
-                    setVoiceProcessing(false);
-                    return;
-                }
-                // Match to known stops
-                const sourceStop = allStops.find(s => s.stop_name.toLowerCase() === source.toLowerCase())
-                    || allStops.find(s => s.stop_name.toLowerCase().includes(source.toLowerCase()));
-                const destStop = allStops.find(s => s.stop_name.toLowerCase() === destination.toLowerCase())
-                    || allStops.find(s => s.stop_name.toLowerCase().includes(destination.toLowerCase()));
-
-                setFromQuery(source);
-                setToQuery(destination);
-                setFromStop(sourceStop || { stop_name: source, stop_id: null });
-                setToStop(destStop || { stop_name: destination, stop_id: null });
-
-                closeVoiceModal();
-                // Trigger search after state settles
-                setTimeout(() => { triggerVoiceSearchRef.current = true; }, 100);
-            } else {
-                setVoiceError(data.error || 'Voice search failed. Please try again.');
-            }
-        } catch (err) {
-            console.error('Voice search error:', err);
-            setVoiceError('Voice search failed. Please try again.');
-        } finally {
-            setVoiceProcessing(false);
-        }
+        triggerVoiceSearchRef.current = true;
     };
 
     // Auto-trigger search after voice fills both stops
@@ -1036,114 +936,11 @@ const FindRoutesPage = () => {
             {modalRoute && <DetailModal route={modalRoute} onClose={() => setModalRoute(null)} />}
 
             {/* ---- Voice Route Search Modal ---- */}
-            {showVoiceModal && ReactDOM.createPortal(
-                <div
-                    style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }}
-                    onClick={closeVoiceModal}
-                >
-                    <div
-                        style={{ backgroundColor: '#fff', borderRadius: 24, width: '100%', maxWidth: 460, margin: '0 16px', fontFamily: 'Poppins, sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden' }}
-                        onClick={e => e.stopPropagation()}
-                    >
-                        {/* Header */}
-                        <div style={{ background: 'linear-gradient(135deg, #f97316, #ea580c)', padding: '24px 24px 20px', color: '#fff' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                                <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 10 }}>
-                                    <Mic size={22} /> Voice Route Search
-                                </h3>
-                                <button onClick={closeVoiceModal} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 10, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                                    <X size={18} color="#fff" />
-                                </button>
-                            </div>
-                            <p style={{ margin: 0, fontSize: 13, opacity: 0.9 }}>Say your source and destination to search</p>
-                        </div>
-
-                        {/* Body */}
-                        <div style={{ padding: 24 }}>
-                            {/* Tips */}
-                            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 14, padding: '14px 16px', marginBottom: 20 }}>
-                                <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>💡 Tips for best results</p>
-                                <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: '#78350f', lineHeight: 1.7 }}>
-                                    <li>Speak clearly and at normal pace</li>
-                                    <li>Say source first, then destination</li>
-                                    <li>Say full stop names</li>
-                                    <li>Prefer saying in microphone for optimal results.</li>
-
-                                </ul>
-                            </div>
-
-                            {/* Example */}
-                            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 14, padding: '12px 16px', marginBottom: 24, textAlign: 'center' }}>
-                                <p style={{ fontSize: 10, fontWeight: 700, color: '#166534', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Example</p>
-                                <p style={{ fontSize: 15, fontWeight: 700, color: '#15803d', margin: 0, fontStyle: 'italic' }}>
-                                    "Faizabad Metro Station to PIMS Metro Station"
-                                </p>
-                            </div>
-
-                            {/* Live transcript */}
-                            {(voiceListening || voiceTranscript) && (
-                                <div style={{ background: '#f8fafc', border: '2px solid', borderColor: voiceListening ? '#f97316' : '#e2e8f0', borderRadius: 14, padding: '14px 16px', marginBottom: 20, minHeight: 52, transition: 'border-color 0.3s' }}>
-                                    <p style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', margin: '0 0 6px', textTransform: 'uppercase' }}>
-                                        {voiceListening ? '🔴 Listening...' : '📝 Recognized'}
-                                    </p>
-                                    <p style={{ fontSize: 15, color: '#111827', fontWeight: 600, margin: 0, minHeight: 20 }}>
-                                        {voiceTranscript || <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Speak now...</span>}
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* Processing indicator */}
-                            {voiceProcessing && (
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '12px 0', marginBottom: 16 }}>
-                                    <Loader2 size={20} className="animate-spin" style={{ color: '#f97316' }} />
-                                    <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>Processing your request...</span>
-                                </div>
-                            )}
-
-                            {/* Error */}
-                            {voiceError && (
-                                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: '10px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <AlertCircle size={16} style={{ color: '#dc2626', flexShrink: 0 }} />
-                                    <span style={{ fontSize: 13, color: '#991b1b' }}>{voiceError} error</span>
-                                </div>
-                            )}
-
-                            {/* Action button */}
-                            <button
-                                onClick={voiceListening ? stopVoiceListening : startVoiceListening}
-                                disabled={voiceProcessing}
-                                style={{
-                                    width: '100%',
-                                    padding: '14px 20px',
-                                    borderRadius: 16,
-                                    border: 'none',
-                                    fontFamily: 'Poppins, sans-serif',
-                                    fontSize: 15,
-                                    fontWeight: 700,
-                                    cursor: voiceProcessing ? 'not-allowed' : 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: 10,
-                                    transition: 'all 0.2s',
-                                    background: voiceProcessing ? '#e5e7eb' : voiceListening ? '#fef2f2' : '#f97316',
-                                    color: voiceProcessing ? '#9ca3af' : voiceListening ? '#dc2626' : '#ffffff',
-                                    boxShadow: voiceProcessing ? 'none' : voiceListening ? '0 4px 14px rgba(220,38,38,0.2)' : '0 4px 14px rgba(249,115,22,0.3)',
-                                }}
-                            >
-                                {voiceProcessing ? (
-                                    <><Loader2 size={20} className="animate-spin" /> Processing...</>
-                                ) : voiceListening ? (
-                                    <><X size={20} /> Stop Listening</>
-                                ) : (
-                                    <><Mic size={20} /> {voiceTranscript ? 'Try Again' : 'Start Speaking'}</>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </div>,
-                document.body
-            )}
+            <VoiceSearchModal
+                isOpen={showVoiceModal}
+                onClose={closeVoiceModal}
+                onRouteFound={handleVoiceRouteFound}
+            />
         </div>
     );
 };
