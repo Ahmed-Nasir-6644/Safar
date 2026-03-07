@@ -20,6 +20,7 @@ import {
     Mic, MicOff, Play, Pause, Trash2, Search,
     X, Loader2, AlertCircle, CheckCircle2, Square,
 } from 'lucide-react';
+import { useGlobalContext } from '../context/GlobalContext';
 
 /* ─── constants ─────────────────────────────────────────────── */
 const BACKEND_URL = 'http://localhost:8000';
@@ -33,6 +34,8 @@ function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
    Component
    ════════════════════════════════════════════════════════════════ */
 export default function VoiceSearchModal({ isOpen, onClose, onRouteFound }) {
+    const { t } = useGlobalContext(); // Get translation context
+    
     /* ── state ── */
     const [phase, setPhase]           = useState('idle');   // idle | recording | stopped | uploading
     const [audioURL, setAudioURL]     = useState(null);     // blob URL for playback
@@ -219,9 +222,9 @@ export default function VoiceSearchModal({ isOpen, onClose, onRouteFound }) {
         } catch (err) {
             console.error('Microphone error:', err);
             if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-                setError('Microphone permission denied. Please allow microphone access and try again.');
+                setError(t.voicePermissionDenied);
             } else {
-                setError('Could not access microphone. Please check your device settings.');
+                setError(t.voiceAccessDenied);
             }
         }
     };
@@ -278,13 +281,13 @@ export default function VoiceSearchModal({ isOpen, onClose, onRouteFound }) {
             });
 
             if (!res.ok) {
-                throw new Error(`Server error: ${res.status}`);
+                throw new Error(`${t.voiceServerError}: ${res.status}`);
             }
 
             const data = await res.json();
 
             if (data.success && data.prediction?.source && data.prediction?.destination) {
-                setSuccess(`Detected: ${data.prediction.source} → ${data.prediction.destination}`);
+                setSuccess(`${t.voiceDetected}: ${data.prediction.source} → ${data.prediction.destination}`);
                 // Give the user a moment to see the success message
                 setTimeout(() => {
                     onRouteFound({
@@ -294,12 +297,12 @@ export default function VoiceSearchModal({ isOpen, onClose, onRouteFound }) {
                     onClose();
                 }, 800);
             } else {
-                setError(data.error || 'Could not detect source/destination. Please try again.');
+                setError(data.error || t.voiceDetectionFailed);
                 setPhase('stopped');
             }
         } catch (err) {
             console.error('Upload error:', err);
-            setError('Could not detect source/destination. Please try again.');
+            setError(t.voiceDetectionFailed);
             setPhase('stopped');
         }
     };

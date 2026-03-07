@@ -61,6 +61,14 @@ export const GlobalProvider = ({ children }) => {
             startingPoint: "Starting Point",
             destination: "Destination",
             voiceSearch: "Voice Search",
+            
+            // Voice Search Error Messages
+            voicePermissionDenied: "Microphone permission denied. Please allow microphone access and try again.",
+            voiceAccessDenied: "Could not access microphone. Please check your device settings.",
+            voiceDetectionFailed: "Could not detect source/destination. Please try again.",
+            voiceServerError: "Server error",
+            voiceDetected: "Detected",
+            
             listening: "Listening...",
             searchRoute: "Search Route",
             routeSteps: "Route Steps",
@@ -169,7 +177,10 @@ export const GlobalProvider = ({ children }) => {
             hqAddress: "Metro Bus Command Center, Jinnah Avenue, Islamabad",
             fullName: "Full Name",
             emailAddress: "Email Address",
-            sendMessage: "Send Message"
+            sendMessage: "Send Message",
+            messageSent: "Message sent successfully! We'll get back to you soon.",
+            messageError: "Failed to send message. Please try again.",
+            sending: "Sending..."
         },
         ur: {
             home: "گھر",
@@ -211,6 +222,14 @@ export const GlobalProvider = ({ children }) => {
             startingPoint: "آغاز کا مقام",
             destination: "منزل",
             voiceSearch: "آواز تلاش",
+            
+            // Voice Search Error Messages
+            voicePermissionDenied: "مائیکروفون کی اجازت مسترد۔ مہربانی کر کے مائیکروفون کی رسائی کی اجازت دیں اور دوبارہ کوشش کریں۔",
+            voiceAccessDenied: "مائیکروفون تک رسائی نہیں ہو سکی۔ براہ کرم اپنے ڈیوائس کی سیٹنگ چیک کریں۔",
+            voiceDetectionFailed: "منزل اور ابتدائی مقام کی شناخت نہیں ہو سکی۔ براہ کرم دوبارہ کوشش کریں۔",
+            voiceServerError: "سرور میں خرابی",
+            voiceDetected: "شناخت ہوا",
+            
             listening: "سن رہا ہے...",
             searchRoute: "راستہ تلاش کریں",
             routeSteps: "راستے کے اقدامات",
@@ -297,6 +316,9 @@ export const GlobalProvider = ({ children }) => {
             fullName: "پورا نام",
             emailAddress: "ای میل ایڈریس",
             sendMessage: "پیغام بھیجیں",
+            messageSent: "پیغام کامیابی سے بھیجا گیا! ہم جلد آپ سے رابطہ کریں گے۔",
+            messageError: "پیغام بھیجنے میں ناکام۔ براہ کرم دوبارہ کوشش کریں۔",
+            sending: "بھیجا جا رہا ہے...",
 
             // Help Page
             howCanWeHelp: "ہم آپ کی کیسے مدد کر سکتے ہیں؟",
