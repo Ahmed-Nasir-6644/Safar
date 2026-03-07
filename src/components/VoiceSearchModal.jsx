@@ -67,6 +67,20 @@ export default function VoiceSearchModal({ isOpen, onClose, onRouteFound }) {
     /* ── cleanup on unmount ── */
     useEffect(() => () => teardown(), []);
 
+    /* ── block body scroll when modal is open ── */
+    useEffect(() => {
+        if (isOpen) {
+            // Save current overflow style and block scrolling
+            const originalOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            
+            return () => {
+                // Restore original overflow when modal closes
+                document.body.style.overflow = originalOverflow;
+            };
+        }
+    }, [isOpen]);
+
     /* ─── teardown helpers ──────────────────────────────────── */
     function stopAnimationLoop() {
         if (animFrameRef.current) {
