@@ -21,9 +21,16 @@ const Footer = () => {
                 </div>
 
                 <div className="flex space-x-8 text-sm text-secondary-gray font-medium">
-                    <a href="#" className="hover:text-accent-orange transition-colors">{t('about')}</a>
-                    <a href="#" className="hover:text-accent-orange transition-colors">{t('contact')}</a>
-                    <a href="#" className="hover:text-accent-orange transition-colors">{t('privacy')}</a>
+                    <a
+                        href="#contact"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className="hover:text-accent-orange transition-colors mr-[0.6vw]"
+                    >
+                        {t('contact')}
+                    </a>
                 </div>
             </div>
 

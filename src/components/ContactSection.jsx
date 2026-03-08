@@ -79,7 +79,7 @@ const ContactSection = () => {
                             </div>
                             <div>
                                 <h3 className="text-lg font-semibold text-gray-900">{t('emailUs')}</h3>
-                                <p className="text-secondary-gray">support@metromate.com</p>
+                                <p className="text-secondary-gray">metromate.isbrwp@gmail.com</p>
                             </div>
                         </div>
 
