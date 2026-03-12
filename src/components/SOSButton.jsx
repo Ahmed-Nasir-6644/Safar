@@ -4,7 +4,7 @@ import {
   AlertCircle, X, Mail, MapPin, Loader2, CheckCircle2,
   AlertTriangle, User, Plus, Trash2, UserPlus, Send,
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useGlobalContext } from '../context/GlobalContext';
 import { sosAPI } from '../utils/api';
 
 // ─── constants ────────────────────────────────────────────────────────────────
@@ -109,7 +109,7 @@ const TabBtn = ({ active, onClick, children }) => (
 
 // ─── SOSButton ────────────────────────────────────────────────────────────────
 const SOSButton = ({ children }) => {
-  const { user } = useAuth();
+  const { user, loading } = useGlobalContext();
 
   // ── modal open/close ──
   const [isOpen, setIsOpen] = useState(false);
@@ -146,9 +146,24 @@ const SOSButton = ({ children }) => {
 
   const userId = user?._id || user?.id || null;
 
+  // Don't render if still loading user data
+  if (loading) {
+    return null;
+  }
+
+  // Don't render if no user is authenticated
+  if (!user || !userId) {
+    return null;
+  }
+
   // ── fetch contacts whenever contacts-tab is opened ────────────────────────
   const fetchContacts = useCallback(async () => {
-    if (!userId) return;
+    if (!userId) {
+      setContacts([]);
+      setContactsLoading(false);
+      return;
+    }
+    
     setContactsLoading(true);
     setContactsError('');
     try {
@@ -159,12 +174,24 @@ const SOSButton = ({ children }) => {
         setContacts([]);
       }
     } catch (err) {
+      console.error('Error fetching SOS contacts:', err);
       setContactsError(err.message || 'Could not load contacts.');
       setContacts([]);
     } finally {
       setContactsLoading(false);
     }
   }, [userId]);
+
+  // Fetch contacts when user changes or component mounts
+  useEffect(() => {
+    if (!loading && user && userId) {
+      fetchContacts();
+    } else if (!loading && !user) {
+      // User is not logged in, clear contacts
+      setContacts([]);
+      setContactsLoading(false);
+    }
+  }, [fetchContacts, loading, user, userId]);
 
   useEffect(() => {
     if (isOpen && tab === 'contacts') {
@@ -174,6 +201,12 @@ const SOSButton = ({ children }) => {
 
   // ── modal open/close helpers ──────────────────────────────────────────────
   const openModal = () => {
+    // Ensure user is still authenticated before opening
+    if (!user || !userId) {
+      console.warn('SOSButton: Cannot open modal - user not authenticated');
+      return;
+    }
+
     setTab('send');
     setPhase('idle');
     setLocation(null);
@@ -188,6 +221,7 @@ const SOSButton = ({ children }) => {
     setAddSuccess('');
     setAddError('');
     setDeleteError('');
+    setContactsError('');
     setIsOpen(true);
     // Fetch the user's emergency contacts immediately on open
     fetchContacts();
@@ -199,15 +233,26 @@ const SOSButton = ({ children }) => {
   };
 
   // ══ SEND logic ════════════════════════════════════════════════════════════
-  // Effective contacts = API contacts if loaded, else fallback to user object
+  // Effective contacts = Only actual API contacts or user.emergencyContacts, no fallback
   const effectiveContacts = contacts.length
     ? contacts
     : (user?.emergencyContacts?.length
         ? user.emergencyContacts
-        : [{ name: user?.name ? `${user.name}'s Contact` : 'Emergency Contact', email: user?.email || 'contact@example.com' }]);
+        : []);
+
+  // Check if user has any emergency contacts
+  const hasEmergencyContacts = effectiveContacts.length > 0;
 
   const handleSend = useCallback(async () => {
     if (phase === 'locating' || phase === 'sending') return;
+    
+    // Check if user has emergency contacts
+    if (!hasEmergencyContacts) {
+      setSendError('No emergency contacts found. Please add contacts first.');
+      setPhase('error');
+      return;
+    }
+
     setSendError('');
     setLocationError('');
     setPhase('locating');
@@ -263,7 +308,7 @@ const SOSButton = ({ children }) => {
       setSendError(err.message || 'Something went wrong. Please try again.');
       setPhase('error');
     }
-  }, [phase, message, userId, effectiveContacts]);
+  }, [phase, message, userId, effectiveContacts, hasEmergencyContacts]);
 
   // ══ ADD CONTACT logic ═════════════════════════════════════════════════════
   const handleAddContact = async () => {
@@ -432,7 +477,18 @@ const SOSButton = ({ children }) => {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 10 }}>
-                    <button onClick={handleSend} style={S.redBtn(false)}><Mail size={15} /> Retry</button>
+                    {hasEmergencyContacts ? (
+                      <button onClick={handleSend} style={S.redBtn(false)}>
+                        <Mail size={15} /> Retry
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={() => setTab('contacts')} 
+                        style={{ ...S.redBtn(false), backgroundColor: '#dc2626' }}
+                      >
+                        <UserPlus size={15} /> Add Contacts
+                      </button>
+                    )}
                     <button onClick={() => { setPhase('idle'); setSendError(''); }} style={{ ...S.ghostBtn, flex: 1 }}>Cancel</button>
                   </div>
                 </>
@@ -442,7 +498,10 @@ const SOSButton = ({ children }) => {
               {(phase === 'idle' || phase === 'locating' || phase === 'sending') && (
                 <>
                   <p style={{ textAlign: 'center', color: '#6b7280', fontSize: 13, margin: 0 }}>
-                    Your live location and message will be sent to your emergency contacts.
+                    {hasEmergencyContacts 
+                      ? 'Your live location and message will be sent to your emergency contacts.'
+                      : 'Add emergency contacts to enable SOS alerts with your location and custom message.'
+                    }
                   </p>
 
                   {/* Contacts preview */}
@@ -459,6 +518,43 @@ const SOSButton = ({ children }) => {
                       <div style={{ ...S.banner('red'), marginBottom: 0 }}>
                         <AlertTriangle size={15} color="#dc2626" style={{ flexShrink: 0 }} />
                         <span style={{ fontSize: 12, color: '#b91c1c' }}>{contactsError}</span>
+                      </div>
+                    ) : !hasEmergencyContacts ? (
+                      <div style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column',
+                        alignItems: 'center', 
+                        gap: 10, 
+                        padding: '20px 16px', 
+                        backgroundColor: '#fef2f2', 
+                        border: '1px solid #fecaca', 
+                        borderRadius: 12,
+                        textAlign: 'center'
+                      }}>
+                        <AlertTriangle size={24} color="#dc2626" />
+                        <div>
+                          <p style={{ margin: 0, fontWeight: 600, fontSize: 14, color: '#b91c1c' }}>No Emergency Contacts</p>
+                          <p style={{ margin: '4px 0 0', fontSize: 12, color: '#dc2626' }}>
+                            You need to add emergency contacts before sending SOS alerts.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setTab('contacts')}
+                          style={{ 
+                            marginTop: 6, 
+                            fontSize: 12, 
+                            color: '#dc2626', 
+                            background: '#fff',
+                            border: '1px solid #dc2626',
+                            borderRadius: 8,
+                            padding: '6px 12px',
+                            cursor: 'pointer', 
+                            fontFamily: 'Poppins, sans-serif', 
+                            fontWeight: 600 
+                          }}
+                        >
+                          + Add Emergency Contact
+                        </button>
                       </div>
                     ) : (
                     <>
@@ -524,13 +620,21 @@ const SOSButton = ({ children }) => {
                   {/* Send button */}
                   <button
                     onClick={handleSend}
-                    disabled={phase !== 'idle'}
-                    style={{ ...S.redBtn(phase !== 'idle'), width: '100%', padding: '14px', fontSize: 15 }}
+                    disabled={phase !== 'idle' || !hasEmergencyContacts}
+                    style={{ 
+                      ...S.redBtn(phase !== 'idle' || !hasEmergencyContacts), 
+                      width: '100%', 
+                      padding: '14px', 
+                      fontSize: 15 
+                    }}
+                    title={!hasEmergencyContacts ? 'Add emergency contacts first' : ''}
                   >
                     {phase === 'sending'
                       ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Sending Alert…</>
                       : phase === 'locating'
                       ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Getting Location…</>
+                      : !hasEmergencyContacts
+                      ? <><AlertTriangle size={18} /> Add Contacts First</>
                       : <><Send size={18} /> Send Email Alert</>}
                   </button>
                 </>

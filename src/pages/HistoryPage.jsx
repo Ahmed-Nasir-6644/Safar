@@ -4,6 +4,43 @@ import { useGlobalContext } from '../context/GlobalContext';
 import { routesAPI } from '../utils/api';
 import { useNavigate } from 'react-router-dom';
 
+// Helper function to handle authentication errors
+const handleAuthError = async (error, navigate) => {
+    let is403 = false;
+    
+    // Check different types of 403 errors
+    if (error?.response?.status === 403) {
+        is403 = true;
+    } else if (error?.status === 403) {
+        is403 = true;
+    } else if (typeof error === 'object' && error.success === false && 
+               error.message === 'Invalid or expired access token') {
+        is403 = true;
+    } else if (error?.message && error.message.includes('403')) {
+        is403 = true;
+    } else if (error instanceof Response && error.status === 403) {
+        is403 = true;
+    }
+    
+    if (is403) {
+        // Clear any stored auth tokens
+        localStorage.removeItem('token');
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('user');
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('accessToken');
+        sessionStorage.removeItem('user');
+        
+        // Redirect to login page
+        navigate('/login', { 
+            replace: true,
+            state: { message: 'Your session has expired. Please log in again.' }
+        });
+        return true; // Indicates that auth error was handled
+    }
+    return false; // Not an auth error
+};
+
 const HistoryPage = () => {
     const { t } = useGlobalContext();
     const navigate = useNavigate();
@@ -42,8 +79,11 @@ const HistoryPage = () => {
                 const response = await routesAPI.getSearchHistory();
                 setHistory(normalizeHistoryItems(response));
             } catch (fetchError) {
-                setError(fetchError.message || 'Failed to load trip history.');
-                setHistory([]);
+                // Handle authentication errors
+                if (!handleAuthError(fetchError, navigate)) {
+                    setError(fetchError.message || 'Failed to load trip history.');
+                    setHistory([]);
+                }
             } finally {
                 setIsLoading(false);
             }

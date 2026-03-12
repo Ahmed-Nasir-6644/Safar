@@ -28,8 +28,28 @@ const authenticatedFetch = async (endpoint, options = {}) => {
     });
 
     if (!response.ok) {
+        // Handle 403 Forbidden responses
+        if (response.status === 403) {
+            // Clear any stored auth tokens
+            localStorage.removeItem('token');
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('user');
+            sessionStorage.removeItem('token');
+            sessionStorage.removeItem('accessToken');
+            sessionStorage.removeItem('user');
+            
+            // Create a custom error with 403 info
+            const error = new Error('Invalid or expired access token');
+            error.status = 403;
+            error.response = response;
+            throw error;
+        }
+        
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `API Error: ${response.status}`);
+        const error = new Error(errorData.message || `API Error: ${response.status}`);
+        error.status = response.status;
+        error.response = response;
+        throw error;
     }
 
     return response.json();
@@ -140,6 +160,14 @@ export const routesAPI = {
     // Get current user's route search history
     getSearchHistory: async () => {
         return authenticatedFetch('/routes/search-history');
+    },
+
+    // Save route search history for current user
+    saveSearchHistory: async (searchData) => {
+        return authenticatedFetch('/routes/search-history', {
+            method: 'POST',
+            body: JSON.stringify(searchData),
+        });
     },
 
     // Save selected route as favorite for current user

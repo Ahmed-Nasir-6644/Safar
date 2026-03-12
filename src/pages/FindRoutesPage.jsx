@@ -1,14 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { MapPin, ArrowRightLeft, Search, Loader2, Map, Mic, Clock, Navigation, AlertCircle, CheckCircle2, ArrowUpDown, Star, Repeat2, Bus, Train, ArrowRight, X, Banknote, ChevronRight, ListOrdered, Volume2, Heart } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useGlobalContext } from '../context/GlobalContext';
 import { routesAPI } from '../utils/api';
 import PaymentFlow from '../components/PaymentFlow';
 import VoiceSearchModal from '../components/VoiceSearchModal';
 import TimelineDisplay from '../components/TimelineDisplay';
+import { handleAuthError } from '../utils/auth';
 
 const FindRoutesPage = () => {
+    const navigate = useNavigate();
+    const location = useLocation();
+    const { t } = useGlobalContext();
+
     const [allStops, setAllStops] = useState([]);
     const [fromQuery, setFromQuery] = useState('');
     const [toQuery, setToQuery] = useState('');
@@ -42,8 +47,38 @@ const FindRoutesPage = () => {
     const [favoriteMessage, setFavoriteMessage] = useState('');
     const [favoriteError, setFavoriteError] = useState('');
 
-    const navigate = useNavigate();
-    const { t } = useGlobalContext();
+    // Track if we need to auto-search from history
+    const [needsAutoSearch, setNeedsAutoSearch] = useState(false);
+
+    // Handle auto-search from history page
+    useEffect(() => {
+        if (location.state?.autoSearch && location.state?.from && location.state?.to) {
+            const { from, to } = location.state;
+            
+            // Set the queries and find the stops
+            setFromQuery(from);
+            setToQuery(to);
+            
+            // Find stops in allStops array when available
+            if (allStops.length > 0) {
+                const fromStopMatch = allStops.find(stop => 
+                    stop.stop_name.toLowerCase() === from.toLowerCase() ||
+                    stop.stop_name.toLowerCase().includes(from.toLowerCase())
+                );
+                const toStopMatch = allStops.find(stop => 
+                    stop.stop_name.toLowerCase() === to.toLowerCase() ||
+                    stop.stop_name.toLowerCase().includes(to.toLowerCase())
+                );
+                
+                if (fromStopMatch && toStopMatch) {
+                    setFromStop(fromStopMatch);
+                    setToStop(toStopMatch);
+                    setNeedsAutoSearch(true);
+                    setLoading(false);
+                }
+            }
+        }
+    }, [location.state, allStops, navigate]);
 
     // Load all stops on mount using the aligned API
     useEffect(() => {
@@ -59,7 +94,10 @@ const FindRoutesPage = () => {
                 }
             } catch (err) {
                 console.error('Failed to load stops:', err);
-                setAllStops([]);
+                // Handle authentication errors
+                if (!handleAuthError(err, navigate)) {
+                    setAllStops([]);
+                }
             }
         };
         loadStops();
@@ -102,8 +140,28 @@ const FindRoutesPage = () => {
             setRoutes(routeList);
             setSortBy('recommended');
             setSelectedRouteIndex(null);
+
+            // Save search to history after successful route search
+            try {
+                await routesAPI.saveSearchHistory({
+                    startingPoint: fromStop.stop_name,
+                    destination: toStop.stop_name,
+                    startStopId: fromStop.stop_id,
+                    endStopId: toStop.stop_id,
+                    searchType: 'by-name'
+                });
+            } catch (historyError) {
+                // Handle authentication errors for history saving
+                if (!handleAuthError(historyError, navigate)) {
+                    // Silently fail for history saving - don't break the main search flow
+                    console.warn('Failed to save search history:', historyError);
+                }
+            }
         } catch (err) {
-            setError(err.message);
+            // Handle authentication errors
+            if (!handleAuthError(err, navigate)) {
+                setError(err.message);
+            }
         } finally {
             setLoading(false);
         }
@@ -149,6 +207,15 @@ const FindRoutesPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fromStop, toStop]);
 
+    // Auto-trigger search from history page
+    useEffect(() => {
+        if (needsAutoSearch && fromStop && toStop) {
+            setNeedsAutoSearch(false);
+            handleSearch();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [needsAutoSearch, fromStop, toStop]);
+
     const handleShowOnMap = (route) => {
         navigate('/network-map', { state: { routeToDisplay: route } });
     };
@@ -190,7 +257,10 @@ const FindRoutesPage = () => {
             setFavoriteRoutes(prev => ({ ...prev, [key]: true }));
             setFavoriteMessage('Route added to favourites successfully.');
         } catch (err) {
-            setFavoriteError(err.message || 'Failed to save favourite route.');
+            // Handle authentication errors
+            if (!handleAuthError(err, navigate)) {
+                setFavoriteError(err.message || 'Failed to save favourite route.');
+            }
         } finally {
             setSavingFavoriteRoutes(prev => {
                 const next = { ...prev };
@@ -249,7 +319,10 @@ const FindRoutesPage = () => {
             }
         } catch (error) {
             console.error('Error dictating route:', error);
-            setDictationErrors(prev => ({ ...prev, [routeIndex]: 'Network error: Could not connect to dictation service' }));
+            // Handle authentication errors first
+            if (!handleAuthError(error, navigate)) {
+                setDictationErrors(prev => ({ ...prev, [routeIndex]: 'Network error: Could not connect to dictation service' }));
+            }
         } finally {
             setDictatingRoutes(prev => { const n = { ...prev }; delete n[routeIndex]; return n; });
         }

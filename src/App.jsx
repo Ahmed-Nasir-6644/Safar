@@ -11,8 +11,8 @@ import HelpPage from './pages/HelpPage';
 import Loader from './components/Loader';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
-import SOSButton from './components/SOSButton';
 import { GlobalProvider, useGlobalContext } from './context/GlobalContext';
+import { isAuthenticated } from './utils/auth';
 import ChatWidget from './components/ChatWidget';
 function AppLayout() {
   const location = useLocation();
@@ -31,9 +31,32 @@ function AppLayout() {
     return <Loader />;
   }
 
-  // If not authenticated, show Auth Page immediately (gated)
-  if (!user) {
+  // Use robust authentication check instead of just checking user
+  const authenticated = isAuthenticated(user);
+
+  // Define routes that should be accessible when not authenticated
+  const publicRoutes = ['/login', '/'];
+  const isPublicRoute = publicRoutes.includes(location.pathname);
+
+  // If not authenticated and trying to access protected route, show Auth Page
+  if (!authenticated) {
+    console.log('User not authenticated, redirecting to login');
     return <AuthPage />;
+  }
+
+  // If not authenticated but accessing public route, render the router
+  if (!authenticated) {
+    console.log('User not authenticated, showing public routes');
+    return (
+      <div className="font-poppins flex flex-col min-h-screen">
+        <Routes>
+          <Route path="/" element={<MainPage />} />
+          <Route path="/login" element={<AuthPage />} />
+          {/* Redirect all other routes to login when not authenticated */}
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </div>
+    );
   }
 
   return (

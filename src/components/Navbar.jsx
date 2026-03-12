@@ -4,6 +4,7 @@ import { useGlobalContext } from '../context/GlobalContext';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import SOSButton from './SOSButton';
 import { notificationsData } from '../data/notifications';
+import { isAuthenticated } from '../utils/auth';
 const Navbar = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -11,6 +12,27 @@ const Navbar = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const displayName = user?.name || user?.username || user?.email?.split('@')[0] || 'User';
+
+    // Helper function to handle protected route navigation
+    const handleProtectedNavigation = (path) => {
+        // Use robust authentication check
+        const authenticated = isAuthenticated(user);
+        
+        console.log('Auth check:', { 
+            user: !!user, 
+            accessToken: !!localStorage.getItem('accessToken'), 
+            authenticated 
+        });
+        
+        if (!authenticated) {
+            navigate('/login', {
+                replace: true,
+                state: { message: 'Please log in to access this feature.' }
+            });
+            return;
+        }
+        navigate(path);
+    };
 
     const navItems = [
         { name: t('home'), icon: <Home className="w-5 h-5" />, path: "/" },
@@ -167,21 +189,35 @@ const Navbar = () => {
                                     <p className="text-xs text-secondary-gray">{user.email}</p>
                                 </div>
                                 <div className="py-2">
-                                    <Link to="/history" className="flex items-center space-x-3 px-5 py-2.5 text-sm text-secondary-gray hover:bg-orange-50 hover:text-accent-orange transition-colors">
+                                    <button 
+                                        onClick={() => {
+                                            handleProtectedNavigation('/history');
+                                            setIsProfileOpen(false);
+                                        }}
+                                        className="w-full text-left flex items-center space-x-3 px-5 py-2.5 text-sm text-secondary-gray hover:bg-orange-50 hover:text-accent-orange transition-colors"
+                                    >
                                         <History className="w-4 h-4" />
                                         <span>{t('myHistory')}</span>
-                                    </Link>
+                                    </button>
                                     <SOSButton>
-                                        <button className="w-full text-left px-5 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3 transition-colors">
+                                        <button 
+                                            className="w-full text-left px-5 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3 transition-colors"
+                                        >
                                             <AlertCircle className="w-4 h-4" />
                                             <span>Emergency SOS</span>
                                         </button>
                                     </SOSButton>
 
-                                    <Link to="/favorites" className="flex items-center space-x-3 px-5 py-2.5 text-sm text-secondary-gray hover:bg-orange-50 hover:text-accent-orange transition-colors">
+                                    <button 
+                                        onClick={() => {
+                                            handleProtectedNavigation('/favorites');
+                                            setIsProfileOpen(false);
+                                        }}
+                                        className="w-full text-left flex items-center space-x-3 px-5 py-2.5 text-sm text-secondary-gray hover:bg-orange-50 hover:text-accent-orange transition-colors"
+                                    >
                                         <Heart className="w-4 h-4" />
                                         <span>{t('myFavorites')}</span>
-                                    </Link>
+                                    </button>
                                 </div>
                                 <div className="border-t border-gray-100 mt-2 pt-2">
                                     <button
@@ -254,12 +290,24 @@ const Navbar = () => {
                                     </div>
                                 </div>
                                 <div className="flex w-full gap-3">
-                                    <Link to="/history" onClick={() => setIsOpen(false)} className="flex-1 py-3 bg-white text-gray-700 font-semibold rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm text-center">
+                                    <button 
+                                        onClick={() => {
+                                            handleProtectedNavigation('/history');
+                                            setIsOpen(false);
+                                        }}
+                                        className="flex-1 py-3 bg-white text-gray-700 font-semibold rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm text-center"
+                                    >
                                         {t('myHistory')}
-                                    </Link>
-                                    <Link to="/favorites" onClick={() => setIsOpen(false)} className="flex-1 py-3 bg-white text-gray-700 font-semibold rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm text-center">
+                                    </button>
+                                    <button 
+                                        onClick={() => {
+                                            handleProtectedNavigation('/favorites');
+                                            setIsOpen(false);
+                                        }}
+                                        className="flex-1 py-3 bg-white text-gray-700 font-semibold rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm text-center"
+                                    >
                                         {t('myFavorites')}
-                                    </Link>
+                                    </button>
                                     <button
                                         onClick={() => {
                                             logout();

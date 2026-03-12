@@ -1,10 +1,49 @@
 import React, { useEffect, useState } from 'react';
-import { Heart, Calendar, MapPin, X, Bus, Clock, TrendingUp } from 'lucide-react';
+import { Heart, Calendar, MapPin, X, Bus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useGlobalContext } from '../context/GlobalContext';
 import { routesAPI } from '../utils/api';
 
+// Helper function to handle authentication errors
+const handleAuthError = async (error, navigate) => {
+    let is403 = false;
+    
+    // Check different types of 403 errors
+    if (error?.response?.status === 403) {
+        is403 = true;
+    } else if (error?.status === 403) {
+        is403 = true;
+    } else if (typeof error === 'object' && error.success === false && 
+               error.message === 'Invalid or expired access token') {
+        is403 = true;
+    } else if (error?.message && error.message.includes('403')) {
+        is403 = true;
+    } else if (error instanceof Response && error.status === 403) {
+        is403 = true;
+    }
+    
+    if (is403) {
+        // Clear any stored auth tokens
+        localStorage.removeItem('token');
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('user');
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('accessToken');
+        sessionStorage.removeItem('user');
+        
+        // Redirect to login page
+        navigate('/login', { 
+            replace: true,
+            state: { message: 'Your session has expired. Please log in again.' }
+        });
+        return true; // Indicates that auth error was handled
+    }
+    return false; // Not an auth error
+};
+
 const FavoriteRoutesPage = () => {
     const { t } = useGlobalContext();
+    const navigate = useNavigate();
     const [favorites, setFavorites] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
@@ -13,15 +52,6 @@ const FavoriteRoutesPage = () => {
     const selectedRouteData = selectedFavorite?.routeData || null;
     const routeSegments = Array.isArray(selectedRouteData?.routeSegments) ? selectedRouteData.routeSegments : [];
     const busSequence = Array.isArray(selectedRouteData?.busSequence) ? selectedRouteData.busSequence : [];
-    const durationLabel = selectedRouteData?.estimatedMinutes
-        ? `${Math.ceil(selectedRouteData.estimatedMinutes)} min`
-        : 'N/A';
-    const distanceLabel = Number.isFinite(selectedRouteData?.totalDistance)
-        ? `${selectedRouteData.totalDistance.toFixed(1)} km`
-        : 'N/A';
-    const fareLabel = selectedRouteData?.fare?.amount
-        ? `${selectedRouteData.fare.amount} ${selectedRouteData.fare.currency || 'PKR'}`
-        : 'N/A';
 
     useEffect(() => {
         const fetchFavorites = async () => {
@@ -32,8 +62,11 @@ const FavoriteRoutesPage = () => {
                 const items = Array.isArray(response?.data) ? response.data : [];
                 setFavorites(items);
             } catch (fetchError) {
-                setError(fetchError.message || 'Failed to load favorite routes.');
-                setFavorites([]);
+                // Handle authentication errors
+                if (!handleAuthError(fetchError, navigate)) {
+                    setError(fetchError.message || 'Failed to load favorite routes.');
+                    setFavorites([]);
+                }
             } finally {
                 setIsLoading(false);
             }
@@ -132,20 +165,6 @@ const FavoriteRoutesPage = () => {
                                 <p className="text-sm font-medium text-gray-600">
                                     {selectedFavorite.startingPoint} → {selectedFavorite.destination}
                                 </p>
-                            </div>
-
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-center">
-                                    <Clock className="w-4 h-4 text-accent-orange mx-auto mb-1" />
-                                    <p className="text-sm font-bold text-gray-900">{durationLabel}</p>
-                                </div>
-                                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-center">
-                                    <TrendingUp className="w-4 h-4 text-accent-orange mx-auto mb-1" />
-                                    <p className="text-sm font-bold text-gray-900">{distanceLabel}</p>
-                                </div>
-                                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-center">
-                                    <p className="text-sm font-bold text-accent-orange">{fareLabel}</p>
-                                </div>
                             </div>
 
                             {busSequence.length > 0 && (
