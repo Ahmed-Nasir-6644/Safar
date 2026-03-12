@@ -6,6 +6,7 @@ import { useGlobalContext } from '../context/GlobalContext';
 import { routesAPI } from '../utils/api';
 import PaymentFlow from '../components/PaymentFlow';
 import VoiceSearchModal from '../components/VoiceSearchModal';
+import TimelineDisplay from '../components/TimelineDisplay';
 
 const FindRoutesPage = () => {
     const [allStops, setAllStops] = useState([]);
@@ -458,6 +459,13 @@ const FindRoutesPage = () => {
 
                     {/* Scrollable body — segments + stop list */}
                     <div style={{ overflowY: 'auto', flex: 1, padding: '16px' }}>
+                        {/* Real-time Timeline Display */}
+                        {route?.timeline && (
+                            <div style={{ marginBottom: '24px' }}>
+                                <TimelineDisplay route={route} />
+                            </div>
+                        )}
+
                         {segments.length > 0 ? segments.map((seg, si) => {
                             // Support both old and new field names
                             const routeName = seg.routeName || seg.route_name;
