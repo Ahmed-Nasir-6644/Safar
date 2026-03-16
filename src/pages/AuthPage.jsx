@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { User, Lock, Mail, ArrowRight, Loader2 } from 'lucide-react';
 import { useGlobalContext } from '../context/GlobalContext';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const AuthPage = () => {
     const [isLogin, setIsLogin] = useState(true);
     const { login, signup, user } = useGlobalContext();
+    const location = useLocation();
+    const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(false);
     const [authError, setAuthError] = useState('');
 
@@ -13,6 +16,34 @@ const AuthPage = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
+    const [verificationPopup, setVerificationPopup] = useState({ show: false, success: true, message: '' });
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const emailVerified = params.get('emailVerified');
+
+        if (!emailVerified) {
+            return;
+        }
+
+        if (emailVerified === 'success') {
+            setIsLogin(true);
+            setVerificationPopup({
+                show: true,
+                success: true,
+                message: 'Your email has been verified. Please login to continue.',
+            });
+            setSuccessMessage('Your email has been verified. Please login to continue.');
+        } else {
+            setVerificationPopup({
+                show: true,
+                success: false,
+                message: 'Email verification failed or link has expired. Please sign up again.',
+            });
+        }
+
+        navigate('/login', { replace: true });
+    }, [location.search, navigate]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -23,9 +54,9 @@ const AuthPage = () => {
             if (isLogin) {
                 await login(email, password);
             } else {
-                await signup(name, email, password);
+                const signupResponse = await signup(name, email, password);
                 // On successful signup, switch to login mode
-                setSuccessMessage('Registration successful! Please login with your credentials.');
+                setSuccessMessage(signupResponse?.message || 'Signup successful. Please check your email for the verification link.');
                 setIsLogin(true);
                 setName('');
                 setEmail('');
@@ -42,6 +73,23 @@ const AuthPage = () => {
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+            {verificationPopup.show && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+                    <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+                        <h3 className={`text-lg font-semibold ${verificationPopup.success ? 'text-green-700' : 'text-red-700'}`}>
+                            {verificationPopup.success ? 'Email Verified' : 'Verification Failed'}
+                        </h3>
+                        <p className="mt-2 text-sm text-gray-600">{verificationPopup.message}</p>
+                        <button
+                            onClick={() => setVerificationPopup({ show: false, success: true, message: '' })}
+                            className={`mt-5 w-full rounded-lg px-4 py-2 text-white ${verificationPopup.success ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} transition-colors`}
+                        >
+                            OK
+                        </button>
+                    </div>
+                </div>
+            )}
+
             <div className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden relative">
                 {/* Header Pattern */}
                 <div className="h-32 bg-accent-orange relative overflow-hidden">
