@@ -21,9 +21,10 @@ import {
     X, Loader2, AlertCircle, CheckCircle2, Square,
 } from 'lucide-react';
 import { useGlobalContext } from '../context/GlobalContext';
+import { PYTHON_API_URL } from '../config/apiConfig';
 
 /* ─── constants ─────────────────────────────────────────────── */
-const BACKEND_URL = 'http://localhost:8000';
+const BACKEND_URL = PYTHON_API_URL;
 const WAVE_BARS   = 32;   // number of equaliser bars
 const SILENCE_THRESHOLD = 6; // RMS value below which we consider silence
 

@@ -8,6 +8,7 @@ import PaymentFlow from '../components/PaymentFlow';
 import VoiceSearchModal from '../components/VoiceSearchModal';
 import TimelineDisplay from '../components/TimelineDisplay';
 import { handleAuthError } from '../utils/auth';
+import { PYTHON_API_URL } from '../config/apiConfig';
 
 const FindRoutesPage = () => {
     const navigate = useNavigate();
@@ -277,7 +278,7 @@ const FindRoutesPage = () => {
         setDictatingRoutes(prev => ({ ...prev, [routeIndex]: true }));
         try {
             if (window.speechSynthesis) window.speechSynthesis.cancel();
-            const response = await fetch('http://localhost:8000/dictate', {
+            const response = await fetch(`${PYTHON_API_URL}/dictate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ocr_result: JSON.stringify(route, null, 2) }),

@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import { Map, Info, Bus, Train, Eye, EyeOff, Filter, Layers, Search, X, MapPin, Navigation, Loader, XCircle, Clock, Route as RouteIcon, ArrowLeft } from 'lucide-react';
 import { useGlobalContext } from '../context/GlobalContext';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { PYTHON_API_URL } from '../config/apiConfig';
 
 // Fix for default marker icons in Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -590,7 +591,7 @@ const NetworkMapPage = () => {
 
         try {
             // Call routing API
-            const response = await fetch('http://localhost:8000/find-route', {
+            const response = await fetch(`${PYTHON_API_URL}/find-route`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'

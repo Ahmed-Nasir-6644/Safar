@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { HelpCircle, ChevronDown, ChevronUp, MessageCircle, Send, Lightbulb, CheckCircle, AlertCircle } from 'lucide-react';
 import { useGlobalContext } from '../context/GlobalContext';
+import { BACKEND_BASE_URL } from '../config/apiConfig';
 
 const HelpPage = () => {
     const { t } = useGlobalContext();
@@ -77,7 +78,7 @@ const FeedbackForm = () => {
         setSubmitStatus(null);
 
         try {
-            const response = await fetch('http://localhost:5000/contact/', {
+            const response = await fetch(`${BACKEND_BASE_URL}/contact/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Mail, Phone, MapPin, Send, CheckCircle, AlertCircle } from 'lucide-react';
 import { useGlobalContext } from '../context/GlobalContext';
-const API_URL = 'http://localhost:5000';
+import { BACKEND_BASE_URL } from '../config/apiConfig';
 
 const ContactSection = () => {
     const { t } = useGlobalContext();
@@ -27,7 +27,7 @@ const ContactSection = () => {
         setSubmitStatus(null);
 
         try {
-            const response = await fetch('http://localhost:5000/contact/', {
+            const response = await fetch(`${BACKEND_BASE_URL}/contact/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

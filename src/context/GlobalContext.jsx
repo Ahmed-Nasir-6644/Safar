@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { BACKEND_BASE_URL } from '../config/apiConfig';
 
 const GlobalContext = createContext();
-const AUTH_API_URL = 'http://localhost:5000/auth';
+const AUTH_API_URL = `${BACKEND_BASE_URL}/auth`;
 
 export const GlobalProvider = ({ children }) => {
     // Auth State

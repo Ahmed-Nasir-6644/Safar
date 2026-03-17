@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, Send, X, Bot, User, Loader2 } from 'lucide-react';
+import { PYTHON_API_URL } from '../config/apiConfig';
 
 const ChatWidget = () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -41,7 +42,7 @@ const ChatWidget = () => {
         setIsLoading(true);
 
         try {
-            const response = await fetch('http://localhost:8000/message', {
+            const response = await fetch(`${PYTHON_API_URL}/message`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

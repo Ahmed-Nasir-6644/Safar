@@ -3,7 +3,9 @@
  * Aligned with reference backend contract (Safar-Backend)
  */
 
-const API_URL = 'http://localhost:5000';
+import { BACKEND_BASE_URL } from '../config/apiConfig';
+
+const API_URL = BACKEND_BASE_URL;
 
 // Helper function to get auth token
 const getAuthToken = () => {
