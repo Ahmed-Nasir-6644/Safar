@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import MainPage from './pages/MainPage';
 import AuthPage from './pages/AuthPage';
 import FindRoutePage from './pages/FindRoutePage'; // Keep existing import for now, will be replaced in route
@@ -14,6 +14,7 @@ import Footer from './components/Footer';
 import { GlobalProvider, useGlobalContext } from './context/GlobalContext';
 import { isAuthenticated } from './utils/auth';
 import ChatWidget from './components/ChatWidget';
+
 function AppLayout() {
   const location = useLocation();
   const { user, loading } = useGlobalContext();
