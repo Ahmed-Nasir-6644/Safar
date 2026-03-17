@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { HashRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import MainPage from './pages/MainPage';
 import AuthPage from './pages/AuthPage';
 import FindRoutePage from './pages/FindRoutePage'; // Keep existing import for now, will be replaced in route
