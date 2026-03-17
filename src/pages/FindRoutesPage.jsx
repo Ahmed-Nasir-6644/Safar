@@ -487,7 +487,7 @@ const FindRoutesPage = () => {
             >
                 {/* Sheet panel — slides up from bottom on all screen sizes */}
                 <div
-                    style={{ backgroundColor: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '680px', maxHeight: '92dvh', overflowY: 'hidden', fontFamily: 'Poppins, sans-serif', boxShadow: '0 -8px 40px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column' }}
+                    style={{ backgroundColor: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '680px', maxHeight: '92dvh', overflowY: 'hidden', overflowX: 'hidden', fontFamily: 'Poppins, sans-serif', boxShadow: '0 -8px 40px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column' }}
                     onClick={e => e.stopPropagation()}
                 >
                     {/* Drag handle */}
@@ -532,7 +532,7 @@ const FindRoutesPage = () => {
                     </div>
 
                     {/* Scrollable body — segments + stop list */}
-                    <div style={{ overflowY: 'auto', flex: 1, padding: '16px' }}>
+                    <div style={{ overflowY: 'auto', overflowX: 'hidden', flex: 1, padding: '16px' }}>
                         {/* Real-time Timeline Display */}
                         {route?.timeline && (
                             <div style={{ marginBottom: '24px' }}>
@@ -570,7 +570,7 @@ const FindRoutesPage = () => {
                                                 return (
                                                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < segStops.length - 1 ? 10 : 0 }}>
                                                         <div style={{ width: 10, height: 10, borderRadius: '50%', background: isFirst ? '#22c55e' : isLast ? '#ef4444' : '#d1d5db', border: '2px solid #fff', outline: `2px solid ${isFirst ? '#22c55e' : isLast ? '#ef4444' : '#d1d5db'}`, flexShrink: 0, marginLeft: -5 }} />
-                                                        <span style={{ fontSize: 13, color: isFirst || isLast ? '#111827' : '#6b7280', fontWeight: isFirst || isLast ? 600 : 400, lineHeight: 1.4 }}>
+                                                        <span style={{ fontSize: 13, color: isFirst || isLast ? '#111827' : '#6b7280', fontWeight: isFirst || isLast ? 600 : 400, lineHeight: 1.4, wordBreak: 'break-word', whiteSpace: 'normal', flex: 1 }}>
                                                             {stop.stop_name || stop}
                                                         </span>
                                                     </div>
@@ -589,7 +589,7 @@ const FindRoutesPage = () => {
                                         return (
                                             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < stops.length - 1 ? 10 : 0 }}>
                                                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: isFirst ? '#22c55e' : isLast ? '#ef4444' : '#d1d5db', border: '2px solid #fff', outline: `2px solid ${isFirst ? '#22c55e' : isLast ? '#ef4444' : '#d1d5db'}`, flexShrink: 0, marginLeft: -5 }} />
-                                                <span style={{ fontSize: 13, color: isFirst || isLast ? '#111827' : '#6b7280', fontWeight: isFirst || isLast ? 600 : 400, lineHeight: 1.4 }}>
+                                                <span style={{ fontSize: 13, color: isFirst || isLast ? '#111827' : '#6b7280', fontWeight: isFirst || isLast ? 600 : 400, lineHeight: 1.4, wordBreak: 'break-word', whiteSpace: 'normal', flex: 1 }}>
                                                     {stop.stop_name || stop}
                                                 </span>
                                             </div>
@@ -623,7 +623,7 @@ const FindRoutesPage = () => {
 
 
     return (
-        <div className="pt-24 pb-16 min-h-screen bg-gray-50">
+        <div className="pt-24 pb-16 min-h-screen bg-gray-50 overflow-x-hidden">
             <div className="my-container">
 
                 {/* Page Title */}

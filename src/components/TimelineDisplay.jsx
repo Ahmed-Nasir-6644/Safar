@@ -25,25 +25,27 @@ const TimelineDisplay = ({ route, className = '' }) => {
     <div className={`w-full ${className}`}>
       {/* Journey Summary Toggle Button */}
       <div 
-        className="px-5 py-3 bg-gradient-to-r from-blue-50 to-gray-50 border border-blue-100 rounded-lg cursor-pointer hover:bg-gradient-to-r hover:from-blue-100 hover:to-gray-100 transition-all"
+        className="px-5 py-3 bg-linear-to-r from-blue-50 to-gray-50 border border-blue-100 rounded-lg cursor-pointer hover:bg-linear-to-r hover:from-blue-100 hover:to-gray-100 transition-all"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="flex items-center justify-between">
-          <p className="font-medium text-xs text-gray-600">
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-medium text-xs text-gray-600 flex-1">
             ✨ Your journey from <span className="font-bold text-gray-900">{stops[0]?.stopName}</span> to{' '}
             <span className="font-bold text-gray-900">{stops[stops.length - 1]?.stopName}</span> takes{' '}
             <span className="font-bold text-blue-600">{summary.totalDurationFormatted}</span> including{' '}
             <span className="font-bold text-orange-600">{summary.totalWaitingTimeMinutes} min</span> of waiting time.
           </p>
-          {isExpanded ? <ChevronUp size={16} className="text-gray-500" /> : <ChevronDown size={16} className="text-gray-500" />}
+          <div className="shrink-0">
+            {isExpanded ? <ChevronUp size={16} className="text-gray-500" /> : <ChevronDown size={16} className="text-gray-500" />}
+          </div>
         </div>
       </div>
 
       {/* Real Time Journey Banner - Only show when expanded */}
       {isExpanded && (
-        <div className="mt-2 bg-gradient-to-b from-blue-50 to-white rounded-xl border border-blue-100 overflow-hidden">
+        <div className="mt-2 bg-linear-to-b from-blue-50 to-white rounded-xl border border-blue-100 overflow-hidden">
           {/* Timeline Header */}
-          <div className="bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-4 text-white">
+          <div className="bg-linear-to-r from-blue-600 to-blue-500 px-5 py-4 text-white">
             <div className="flex items-center gap-3 mb-3">
               <Clock size={18} />
               <h3 className="font-bold text-sm uppercase tracking-wide">Real-Time Journey</h3>
