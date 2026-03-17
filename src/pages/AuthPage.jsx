@@ -19,7 +19,11 @@ const AuthPage = () => {
     const [verificationPopup, setVerificationPopup] = useState({ show: false, success: true, message: '' });
 
     useEffect(() => {
-        const params = new URLSearchParams(location.search);
+        const search = location.search || window.location.search;
+        const hashQuery = window.location.hash.includes('?')
+            ? window.location.hash.slice(window.location.hash.indexOf('?'))
+            : '';
+        const params = new URLSearchParams(search || hashQuery);
         const emailVerified = params.get('emailVerified');
 
         if (!emailVerified) {
@@ -42,7 +46,7 @@ const AuthPage = () => {
             });
         }
 
-        navigate('/login', { replace: true });
+        navigate('/', { replace: true });
     }, [location.search, navigate]);
 
     const handleSubmit = async (e) => {
