@@ -480,14 +480,20 @@ const FindRoutesPage = () => {
         const totalTransfers = getRouteTransfers(route);
         const fareLabel = getRouteFareLabel(route, totalDist);
 
+        // Lock body scroll when modal is open (prevents background scrolling on mobile)
+        React.useEffect(() => {
+            document.body.style.overflow = 'hidden';
+            return () => { document.body.style.overflow = ''; };
+        }, []);
+
         return ReactDOM.createPortal(
             <div
-                style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', width: '100%', height: '100dvh', overflow: 'hidden' }}
+                style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', width: '100vw', maxWidth: '100vw', height: '100dvh', overflow: 'hidden', boxSizing: 'border-box' }}
                 onClick={onClose}
             >
-                {/* Sheet panel — slides up from bottom on all screen sizes */}
+                {/* Sheet panel — bottom sheet on all screen sizes */}
                 <div
-                    style={{ backgroundColor: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 'min(100vw, 680px)', minWidth: 0, maxHeight: '92dvh', overflowY: 'hidden', overflowX: 'hidden', fontFamily: 'Poppins, sans-serif', boxShadow: '0 -8px 40px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}
+                    style={{ backgroundColor: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '680px', maxHeight: '92dvh', overflowY: 'hidden', overflowX: 'hidden', fontFamily: 'Poppins, sans-serif', boxShadow: '0 -8px 40px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', minWidth: 0 }}
                     onClick={e => e.stopPropagation()}
                 >
                     {/* Drag handle */}
@@ -496,20 +502,20 @@ const FindRoutesPage = () => {
                     </div>
 
                     {/* Header */}
-                    <div style={{ padding: '10px 16px 10px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, flexShrink: 0 }}>
-                        <div style={{ minWidth: 0, flex: 1, paddingRight: '12px' }}>
-                            <p style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 2px' }}>Route Details</p>
-                            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#111827', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: '1.3' }}>
+                    <div style={{ padding: '8px 14px 10px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexShrink: 0, minWidth: 0 }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                            <p style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 2px' }}>Route Details</p>
+                            <h3 style={{ fontSize: 13, fontWeight: 700, color: '#111827', margin: 0, wordBreak: 'break-word', lineHeight: '1.35', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                                 {fromStop?.stop_name || stops[0]?.stop_name || 'Start'} → {toStop?.stop_name || stops[stops.length - 1]?.stop_name || 'End'}
                             </h3>
                         </div>
-                        <button onClick={onClose} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 10, border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <X size={16} color="#6b7280" />
+                        <button onClick={onClose} style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 9, border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <X size={15} color="#6b7280" />
                         </button>
                     </div>
 
-                    {/* Stats — 2-column grid (always, scales up naturally on wider screens) */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', borderBottom: '1px solid #f3f4f6', flexShrink: 0, width: '100%' }}>
+                    {/* Stats — 2-column grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', borderBottom: '1px solid #f3f4f6', flexShrink: 0, width: '100%', boxSizing: 'border-box' }}>
                         {[
                             { Icon: Clock, label: 'Duration', value: formatTime(totalTime), color: '#f97316' },
                             { Icon: Repeat2, label: 'Transfers', value: totalTransfers, color: '#3b82f6' },
@@ -517,60 +523,61 @@ const FindRoutesPage = () => {
                             { Icon: Banknote, label: 'Est. Fare', value: fareLabel, color: '#10b981' },
                         ].map(({ Icon, label, value, color }, idx) => (
                             <div key={label} style={{
-                                padding: '12px 10px',
+                                padding: '10px 8px',
                                 textAlign: 'center',
                                 borderRight: idx % 2 === 0 ? '1px solid #f3f4f6' : 'none',
                                 borderBottom: idx < 2 ? '1px solid #f3f4f6' : 'none',
+                                minWidth: 0,
+                                boxSizing: 'border-box',
                             }}>
-                                <div style={{ width: 30, height: 30, borderRadius: 9, background: `${color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 5px' }}>
-                                    <Icon size={15} color={color} />
+                                <div style={{ width: 28, height: 28, borderRadius: 8, background: `${color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 4px' }}>
+                                    <Icon size={14} color={color} />
                                 </div>
-                                <p style={{ fontSize: 10, color: '#9ca3af', margin: '0 0 2px', fontWeight: 500 }}>{label}</p>
-                                <p style={{ fontSize: 13, fontWeight: 700, color: '#111827', margin: 0 }}>{value}</p>
+                                <p style={{ fontSize: 9, color: '#9ca3af', margin: '0 0 2px', fontWeight: 500 }}>{label}</p>
+                                <p style={{ fontSize: 12, fontWeight: 700, color: '#111827', margin: 0 }}>{value}</p>
                             </div>
                         ))}
                     </div>
 
                     {/* Scrollable body — segments + stop list */}
-                    <div style={{ overflowY: 'auto', overflowX: 'hidden', flex: 1, padding: '16px' }}>
+                    <div style={{ overflowY: 'auto', overflowX: 'hidden', flex: 1, padding: '14px', minWidth: 0, boxSizing: 'border-box' }}>
                         {/* Real-time Timeline Display */}
                         {route?.timeline && (
-                            <div style={{ marginBottom: '24px' }}>
+                            <div style={{ marginBottom: '20px' }}>
                                 <TimelineDisplay route={route} />
                             </div>
                         )}
 
                         {segments.length > 0 ? segments.map((seg, si) => {
-                            // Support both old and new field names
                             const routeName = seg.routeName || seg.route_name;
                             const TransIcon = getTransportIcon(routeName);
                             const segStops = seg.stops || [];
                             return (
-                                <div key={si} style={{ marginBottom: si < segments.length - 1 ? 20 : 0 }}>
+                                <div key={si} style={{ marginBottom: si < segments.length - 1 ? 18 : 0 }}>
                                     {/* Segment header */}
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                                        <div style={{ width: 32, height: 32, borderRadius: 10, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                            <TransIcon size={15} color="#374151" />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, minWidth: 0 }}>
+                                        <div style={{ width: 30, height: 30, borderRadius: 9, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                            <TransIcon size={14} color="#374151" />
                                         </div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{routeName || 'Route'}</p>
-                                            <p style={{ margin: 0, fontSize: 11, color: '#9ca3af' }}>{segStops.length} stops on this segment</p>
+                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{routeName || 'Route'}</p>
+                                            <p style={{ margin: 0, fontSize: 10, color: '#9ca3af' }}>{segStops.length} stops on this segment</p>
                                         </div>
                                         {si < segments.length - 1 && (
-                                            <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 99, background: '#fef3c7', color: '#d97706', border: '1px solid #fde68a' }}>Transfer</span>
+                                            <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 700, padding: '3px 7px', borderRadius: 99, background: '#fef3c7', color: '#d97706', border: '1px solid #fde68a' }}>Transfer</span>
                                         )}
                                     </div>
 
                                     {/* Stop list */}
                                     {segStops.length > 0 && (
-                                        <div style={{ paddingLeft: 16, borderLeft: '2px solid #e5e7eb' }}>
+                                        <div style={{ paddingLeft: 14, borderLeft: '2px solid #e5e7eb' }}>
                                             {segStops.map((stop, i) => {
                                                 const isFirst = i === 0;
                                                 const isLast = i === segStops.length - 1;
                                                 return (
-                                                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < segStops.length - 1 ? 10 : 0 }}>
-                                                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: isFirst ? '#22c55e' : isLast ? '#ef4444' : '#d1d5db', border: '2px solid #fff', outline: `2px solid ${isFirst ? '#22c55e' : isLast ? '#ef4444' : '#d1d5db'}`, flexShrink: 0, marginLeft: -5 }} />
-                                                        <span style={{ fontSize: 13, color: isFirst || isLast ? '#111827' : '#6b7280', fontWeight: isFirst || isLast ? 600 : 400, lineHeight: 1.4, wordBreak: 'break-word', whiteSpace: 'normal', flex: 1 }}>
+                                                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: i < segStops.length - 1 ? 9 : 0 }}>
+                                                        <div style={{ width: 9, height: 9, borderRadius: '50%', background: isFirst ? '#22c55e' : isLast ? '#ef4444' : '#d1d5db', border: '2px solid #fff', outline: `2px solid ${isFirst ? '#22c55e' : isLast ? '#ef4444' : '#d1d5db'}`, flexShrink: 0, marginLeft: -5 }} />
+                                                        <span style={{ fontSize: 12, color: isFirst || isLast ? '#111827' : '#6b7280', fontWeight: isFirst || isLast ? 600 : 400, lineHeight: 1.4, wordBreak: 'break-word', whiteSpace: 'normal', flex: 1, minWidth: 0 }}>
                                                             {stop.stop_name || stop}
                                                         </span>
                                                     </div>
@@ -582,14 +589,14 @@ const FindRoutesPage = () => {
                             );
                         }) : (
                             stops.length > 0 && (
-                                <div style={{ paddingLeft: 16, borderLeft: '2px solid #e5e7eb' }}>
+                                <div style={{ paddingLeft: 14, borderLeft: '2px solid #e5e7eb' }}>
                                     {stops.map((stop, i) => {
                                         const isFirst = i === 0;
                                         const isLast = i === stops.length - 1;
                                         return (
-                                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < stops.length - 1 ? 10 : 0 }}>
-                                                <div style={{ width: 10, height: 10, borderRadius: '50%', background: isFirst ? '#22c55e' : isLast ? '#ef4444' : '#d1d5db', border: '2px solid #fff', outline: `2px solid ${isFirst ? '#22c55e' : isLast ? '#ef4444' : '#d1d5db'}`, flexShrink: 0, marginLeft: -5 }} />
-                                                <span style={{ fontSize: 13, color: isFirst || isLast ? '#111827' : '#6b7280', fontWeight: isFirst || isLast ? 600 : 400, lineHeight: 1.4, wordBreak: 'break-word', whiteSpace: 'normal', flex: 1 }}>
+                                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: i < stops.length - 1 ? 9 : 0 }}>
+                                                <div style={{ width: 9, height: 9, borderRadius: '50%', background: isFirst ? '#22c55e' : isLast ? '#ef4444' : '#d1d5db', border: '2px solid #fff', outline: `2px solid ${isFirst ? '#22c55e' : isLast ? '#ef4444' : '#d1d5db'}`, flexShrink: 0, marginLeft: -5 }} />
+                                                <span style={{ fontSize: 12, color: isFirst || isLast ? '#111827' : '#6b7280', fontWeight: isFirst || isLast ? 600 : 400, lineHeight: 1.4, wordBreak: 'break-word', whiteSpace: 'normal', flex: 1, minWidth: 0 }}>
                                                     {stop.stop_name || stop}
                                                 </span>
                                             </div>
@@ -600,17 +607,17 @@ const FindRoutesPage = () => {
                         )}
                     </div>
 
-                    {/* Footer — buttons always visible, stacked on very small screens */}
-                    <div style={{ padding: '12px 16px', paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))', borderTop: '1px solid #f3f4f6', display: 'flex', flexWrap: 'wrap', gap: 10, flexShrink: 0, backgroundColor: '#fff' }}>
+                    {/* Footer — full width buttons stacked on mobile */}
+                    <div style={{ padding: '10px 14px', paddingBottom: 'max(14px, env(safe-area-inset-bottom, 14px))', borderTop: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0, backgroundColor: '#fff', boxSizing: 'border-box' }}>
                         <button
                             onClick={() => { onClose(); handleShowOnMap(route); }}
-                            style={{ flex: '1 1 140px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '13px 12px', borderRadius: 14, background: '#eff6ff', color: '#2563eb', fontWeight: 700, fontSize: 14, border: '1px solid #bfdbfe', cursor: 'pointer' }}
+                            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '13px 12px', borderRadius: 14, background: '#eff6ff', color: '#2563eb', fontWeight: 700, fontSize: 14, border: '1px solid #bfdbfe', cursor: 'pointer', boxSizing: 'border-box' }}
                         >
                             <Map size={17} /> View on Map
                         </button>
                         <button
                             onClick={onClose}
-                            style={{ flex: '1 1 80px', padding: '13px 20px', borderRadius: 14, background: '#f3f4f6', color: '#374151', fontWeight: 600, fontSize: 14, border: 'none', cursor: 'pointer' }}
+                            style={{ width: '100%', padding: '13px 20px', borderRadius: 14, background: '#f3f4f6', color: '#374151', fontWeight: 600, fontSize: 14, border: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
                         >
                             Close
                         </button>
