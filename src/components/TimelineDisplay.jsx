@@ -29,7 +29,7 @@ const TimelineDisplay = ({ route, className = '' }) => {
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center justify-between gap-3">
-          <p className="font-medium text-xs text-gray-600 flex-1">
+          <p className="font-medium text-xs text-gray-600 flex-1 min-w-0 [word-break:break-word]">
             ✨ Your journey from <span className="font-bold text-gray-900">{stops[0]?.stopName}</span> to{' '}
             <span className="font-bold text-gray-900">{stops[stops.length - 1]?.stopName}</span> takes{' '}
             <span className="font-bold text-blue-600">{summary.totalDurationFormatted}</span> including{' '}

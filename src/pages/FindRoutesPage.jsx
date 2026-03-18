@@ -487,7 +487,7 @@ const FindRoutesPage = () => {
             >
                 {/* Sheet panel — slides up from bottom on all screen sizes */}
                 <div
-                    style={{ backgroundColor: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '680px', maxHeight: '92dvh', overflowY: 'hidden', overflowX: 'hidden', fontFamily: 'Poppins, sans-serif', boxShadow: '0 -8px 40px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}
+                    style={{ backgroundColor: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 'min(100vw, 680px)', minWidth: 0, maxHeight: '92dvh', overflowY: 'hidden', overflowX: 'hidden', fontFamily: 'Poppins, sans-serif', boxShadow: '0 -8px 40px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}
                     onClick={e => e.stopPropagation()}
                 >
                     {/* Drag handle */}
@@ -509,7 +509,7 @@ const FindRoutesPage = () => {
                     </div>
 
                     {/* Stats — 2-column grid (always, scales up naturally on wider screens) */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', borderBottom: '1px solid #f3f4f6', flexShrink: 0 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', borderBottom: '1px solid #f3f4f6', flexShrink: 0, width: '100%' }}>
                         {[
                             { Icon: Clock, label: 'Duration', value: formatTime(totalTime), color: '#f97316' },
                             { Icon: Repeat2, label: 'Transfers', value: totalTransfers, color: '#3b82f6' },
