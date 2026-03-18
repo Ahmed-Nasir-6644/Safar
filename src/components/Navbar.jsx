@@ -71,6 +71,7 @@ const Navbar = () => {
     };
 
     return (
+        <>
         <nav className="absolute top-0 left-0 w-full flex items-center justify-between py-4 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 my-container">
             {/* Logo area */}
             <Link to="/" className="flex items-center space-x-2 mr-8">
@@ -242,10 +243,11 @@ const Navbar = () => {
             <button className="lg:hidden text-gray-900 p-2" onClick={() => setIsOpen(!isOpen)}>
                 {isOpen ? <X className="w-7 h-7" /> : <Menu className="w-7 h-7" />}
             </button>
+        </nav>
 
-            {/* Mobile Menu Overlay */}
-            <div className={`fixed top-0 right-0 w-screen h-[100dvh] z-[9999] bg-gray-50 transform transition-transform duration-300 ease-in-out lg:hidden ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-                <div className="flex flex-col min-h-full my-container py-6 overflow-y-auto">
+        {/* Mobile Menu Overlay */}
+            <div className={`fixed inset-0 z-[9999] bg-gray-50 transform transition-transform duration-300 ease-in-out flex flex-col lg:hidden ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+                <div className="flex flex-col h-full w-full my-container py-6 overflow-y-auto">
                     {/* Header in Mobile Menu */}
                     <div className="flex items-center justify-between flex-shrink-0">
                         <div className="flex items-center gap-2">
@@ -324,7 +326,7 @@ const Navbar = () => {
                     </div>
                 </div>
             </div>
-        </nav>
+        </>
     );
 };
 

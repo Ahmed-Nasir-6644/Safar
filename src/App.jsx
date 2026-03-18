@@ -49,7 +49,7 @@ function AppLayout() {
   if (!authenticated) {
     console.log('User not authenticated, showing public routes');
     return (
-      <div className="font-poppins flex flex-col min-h-screen">
+      <div className="font-poppins flex flex-col min-h-screen overflow-x-hidden">
         <Routes>
           <Route path="/" element={<MainPage />} />
           <Route path="/login" element={<AuthPage />} />
